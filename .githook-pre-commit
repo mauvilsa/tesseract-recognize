@@ -1,0 +1,21 @@
+#!/bin/bash
+
+FILES=( $(git status --porcelain | grep ^M) );
+V=$(date -u +%Y.%m.%d);
+
+n=1;
+while [ "$n" -lt "${#FILES[@]}" ]; do
+  case "${FILES[$n]}" in
+    "tesseract-recognize.cc" )
+      [ "${FILES[$((n-1))]}" == "MM" ] &&
+        echo "${0##*/}: error: unable to update version due to change after staged: ${FILES[$n]}" 1>&2 &&
+        exit 1;
+      echo "${0##*/}: updating version of ${FILES[$n]}" 1>&2;
+      sed -i 's|$Version:[^$]*\$|$Version: '"$V"'$|' "${FILES[$n]}";
+      git add "${FILES[$n]}";
+      ;;
+  esac
+  n=$((n+2));
+done
+
+exit 0;
