@@ -8,7 +8,7 @@ pkg_check_modules( tesseract REQUIRED tesseract )
 
 file( GLOB tool_SRC "*.cc" )
 add_executable( ${tool_EXE} ${tool_SRC} )
-include_directories( ${tesseract_INCLUDEDIR} )
+include_directories( SYSTEM ${tesseract_INCLUDEDIR} )
 if( EXISTS "${CMAKE_HOME_DIRECTORY}/tesseract-ocr" )
   include_directories( tesseract-ocr/ccstruct tesseract-ocr/ccutil tesseract-ocr/cutil tesseract-ocr/image tesseract-ocr/viewer )
   add_definitions( -D__TESSERACT_SOURCE__ )
@@ -18,6 +18,7 @@ endif()
 #set_target_properties( ${tool_EXE} PROPERTIES COMPILE_FLAGS "-Wall -W -Wno-unused-function" )
 ##set_source_files_properties(foo.cpp PROPERTIES COMPILE_FLAGS -Wno-effc++)
 
+#target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} -lOpenCL )
 target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} )
 
 install( TARGETS ${tool_EXE} DESTINATION bin )
