@@ -13,6 +13,10 @@ tesseract-recognize - A tool that does OCR recognition using tesseract and outpu
     tesseract-recognize --help
     tesseract-recognize IMAGE > IMAGE.xml
 
+# VIEWING RESULTS
+
+THe results can be viewed/edited using the Page XML editor available at https://github.com/mauvilsa/nw-page-editor or using other tools that support this format such as http://www.primaresearch.org/tools and https://transkribus.eu/Transkribus/ .
+
 # COPYRIGHT
 
 The MIT License (MIT)
