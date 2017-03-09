@@ -30,7 +30,7 @@ static char version[] = "$Version: 2017.01.12$";
 char gb_default_lang[] = "eng";
 
 char *gb_lang = gb_default_lang;
-//int gb_psm = 3;
+int gb_psm = tesseract::PSM_AUTO_ONLY;
 int gb_level = 4;
 int gb_format = OUT_XMLPAGE;
 bool gb_regblock = true;
@@ -39,20 +39,20 @@ enum {
   OPTION_HELP       = 'h',
   OPTION_VERSION    = 'v',
   OPTION_LANG       = 'l',
-  //OPTION_PSM        = 'S',
+  OPTION_PSM        = 'S',
   OPTION_LEVEL      = 'L',
   OPTION_FORMAT     = 'F',
   OPTION_BLOCKS     = 'B',
   OPTION_PARAGRAPHS = 'P'
 };
 
-static char gb_short_options[] = "hvl:L:F:BP";
+static char gb_short_options[] = "hvl:S:L:F:BP";
 
 static struct option gb_long_options[] = {
     { "help",        no_argument,       NULL, OPTION_HELP },
     { "version",     no_argument,       NULL, OPTION_VERSION },
     { "lang",        required_argument, NULL, OPTION_LANG },
-    //{ "psm",         required_argument, NULL, OPTION_PSM },
+    { "psm",         required_argument, NULL, OPTION_PSM },
     { "level",       required_argument, NULL, OPTION_LEVEL },
     { "format",      required_argument, NULL, OPTION_FORMAT },
     { "blocks",      no_argument,       NULL, OPTION_BLOCKS },
@@ -68,14 +68,14 @@ void print_usage() {
   fprintf( stderr, "Usage: %s [OPTIONS] IMAGE\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " -l, --lang LANG      Language used for OCR (def.=%s)\n", gb_lang );
-  //fprintf( stderr, " -S, --psm MODE       Page segmentation mode [3-10] (def.=%d)\n", gb_psm );
+  fprintf( stderr, " -S, --psm MODE       Page segmentation mode [3-10] (def.=%d)\n", gb_psm );
   fprintf( stderr, " -L, --level LEVEL    Layout level: 1=blocks, 2=paragraphs, 3=lines, 4=words, 5=chars (def.=%d)\n", gb_level );
   fprintf( stderr, " -F, --format FORMAT  Output format, either 'ascii' or 'xmlpage' (def.=xmlpage)\n" );
   fprintf( stderr, " -B, --blocks         Use blocks for the TextRegions (def.=%s)\n", strbool(gb_regblock) );
   fprintf( stderr, " -P, --paragraphs     Use paragraphs for the TextRegions (def.=%s)\n", strbool(!gb_regblock) );
   fprintf( stderr, " -h, --help           Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version        Print version and exit\n" );
-  //int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||;' 1>&2" );
+  int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||;' 1>&2" );
 }
 
 void xmlEncode(std::string& data) {
@@ -106,13 +106,13 @@ int main( int argc, char *argv[] ) {
       case OPTION_LANG:
         gb_lang = optarg;
         break;
-      //case OPTION_PSM:
-      //  gb_psm = atoi(optarg);
-      //  if( gb_psm < 3 || gb_psm > 10 ) {
-      //    fprintf( stderr, "%s: error: invalid page segmentation mode: %s\n", tool, optarg );
-      //    return 1;
-      //  }
-      //  break;
+      case OPTION_PSM:
+        gb_psm = atoi(optarg);
+        /*if( gb_psm < 3 || gb_psm > 10 ) {
+          fprintf( stderr, "%s: error: invalid page segmentation mode: %s\n", tool, optarg );
+          return 1;
+        }*/
+        break;
       case OPTION_LEVEL:
         gb_level = atoi(optarg);
         if( gb_level < 1 || gb_level > 5 ) {
@@ -168,6 +168,7 @@ int main( int argc, char *argv[] ) {
 //#else
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
 //#endif
+  //if( tessApi->Init(NULL, gb_lang, tesseract::OEM_LSTM_ONLY ) ) {
   if( tessApi->Init(NULL, gb_lang) ) {
     fprintf(stderr, "Could not initialize tesseract.\n");
     exit(1);
@@ -184,9 +185,6 @@ int main( int argc, char *argv[] ) {
 //#else
   tesseract::ResultIterator* iter = tessApi->GetIterator();
 //#endif
-
-  if ( iter == 0 || iter->Empty( tesseract::RIL_BLOCK ) )
-    return 0;
 
   /// Ouput result in the selected format ///
   bool xmlpage = gb_format == OUT_XMLPAGE ? true : false ;
@@ -223,6 +221,7 @@ int main( int argc, char *argv[] ) {
   char xheight[48]; xheight[0] = '\0';
 
   int block = 0;
+  if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) )
   while ( gb_level > 0 ) {
 /*
  0 PT_UNKNOWN,        // Type is not yet known. Keep as the first element.
