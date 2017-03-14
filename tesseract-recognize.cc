@@ -11,6 +11,7 @@
 /*** Includes *****************************************************************/
 #include <../tesseract/baseapi.h>
 #include <../leptonica/allheaders.h>
+#include <algorithm>
 #include <string>
 #include <getopt.h>
 #include <time.h>
@@ -73,7 +74,7 @@ static struct option gb_long_options[] = {
 
 void print_usage() {
   fprintf( stderr, "Description: OCR recognition using tesseract\n" );
-  fprintf( stderr, "Usage: %s [OPTIONS] IMAGE\n", tool );
+  fprintf( stderr, "Usage: %s [OPTIONS] IMAGE [OUTPUT]\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " -l, --lang LANG      Language used for OCR (def.=%s)\n", gb_lang );
   fprintf( stderr, "     --tessdata PATH  Location of tessdata (def.=%s)\n", gb_tessdata );
@@ -111,10 +112,12 @@ void xmlEncode(std::string& data) {
     data.swap(buffer);
 }
 
-
 /*** Program ******************************************************************/
 int main( int argc, char *argv[] ) {
   int err = 0;
+
+  /// Disable debugging and informational messages from Leptonica. ///
+  setMsgSeverity(L_SEVERITY_ERROR);
 
   /// Parse input arguments ///
   int n,m;
@@ -181,7 +184,8 @@ int main( int argc, char *argv[] ) {
   }
 
   /// Read image ///
-  Pix *image = pixRead( argv[optind] );
+  char *ifn = argv[optind++];
+  Pix *image = pixRead( ifn );
   if( image == NULL )
     return 1;
 
@@ -211,9 +215,19 @@ int main( int argc, char *argv[] ) {
   tesseract::ResultIterator* iter = tessApi->GetIterator();
 //#endif
 
-  /// Ouput result in the selected format ///
+  /// Output result in the selected format ///
   bool xmlpage = gb_format == OUT_XMLPAGE ? true : false ;
 
+  /// Open file for writing output ///
+  FILE *ofs = stdout;
+  if( optind < argc &&
+      strcmp("-",argv[optind]) &&
+      (ofs=fopen(argv[optind],"wb")) == NULL ) {
+    fprintf( stderr, "%s: error: unable to write to file %s\n", tool, argv[optind] );
+    return 1;
+  }
+
+  /// Output results ///
   if ( xmlpage ) {
     char buf[80];
     time_t now = time(0);
@@ -221,14 +235,14 @@ int main( int argc, char *argv[] ) {
     tstruct = *localtime( &now );
     strftime( buf, sizeof(buf), "%Y-%m-%dT%X", &tstruct );
 
-    printf( "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" );
-    printf( "<PcGts xmlns=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd\">\n" );
-    printf( "  <Metadata>\n" );
-    printf( "    <Creator>%s</Creator>\n", tool );
-    printf( "    <Created>%s</Created>\n", buf );
-    printf( "    <LastChange>%s</LastChange>\n", buf );
-    printf( "  </Metadata>\n" );
-    printf( "  <Page imageFilename=\"%s\" imageWidth=\"%d\" imageHeight=\"%d\">\n", argv[optind], image->w, image->h );
+    fprintf( ofs, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" );
+    fprintf( ofs, "<PcGts xmlns=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd\">\n" );
+    fprintf( ofs, "  <Metadata>\n" );
+    fprintf( ofs, "    <Creator>%s</Creator>\n", tool );
+    fprintf( ofs, "    <Created>%s</Created>\n", buf );
+    fprintf( ofs, "    <LastChange>%s</LastChange>\n", buf );
+    fprintf( ofs, "  </Metadata>\n" );
+    fprintf( ofs, "  <Page imageFilename=\"%s\" imageWidth=\"%d\" imageHeight=\"%d\">\n", ifn, image->w, image->h );
   }
 
   int x1, y1, x2, y2;
@@ -304,10 +318,10 @@ int main( int argc, char *argv[] ) {
     }
 
     if ( ! xmlpage )
-      printf( "block %d : %dx%d+%d+%d\n", block, right-left, bottom-top, left, top );
+      fprintf( ofs, "block %d : %dx%d+%d+%d\n", block, right-left, bottom-top, left, top );
     else if ( gb_regblock ) {
-      printf( "    <TextRegion id=\"b%d\"%s%s>\n", block, direct, orient );
-      printf( "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
+      fprintf( ofs, "    <TextRegion id=\"b%d\"%s%s>\n", block, direct, orient );
+      fprintf( ofs, "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
         left, top,   right, top,   right, bottom,   left, bottom );
     }
 
@@ -317,24 +331,24 @@ int main( int argc, char *argv[] ) {
       iter->BoundingBox( tesseract::RIL_PARA, &left, &top, &right, &bottom );
       iter->ParagraphInfo( &just, &is_list, &is_crown, &indent );
       if ( ! xmlpage ) {
-        printf( "paragraph %d :", para );
+        fprintf( ofs, "paragraph %d :", para );
         if ( just == tesseract::JUSTIFICATION_LEFT )
-          printf( " left" );
+          fprintf( ofs, " left" );
         else if ( just == tesseract::JUSTIFICATION_CENTER )
-          printf( " center" );
+          fprintf( ofs, " center" );
         else if ( just == tesseract::JUSTIFICATION_RIGHT )
-          printf( " right" );
+          fprintf( ofs, " right" );
         if ( is_list )
-          printf( " list" );
+          fprintf( ofs, " list" );
         if ( is_crown )
-          printf( " crown" );
+          fprintf( ofs, " crown" );
         else if ( indent != 0 )
-          printf( " %d", indent );
-        printf( " %dx%d+%d+%d\n", right-left, bottom-top, left, top );
+          fprintf( ofs, " %d", indent );
+        fprintf( ofs, " %dx%d+%d+%d\n", right-left, bottom-top, left, top );
       }
       else if ( ! gb_regblock ) {
-        printf( "    <TextRegion id=\"b%d_p%d\"%s%s>\n", block, para, direct, orient );
-        printf( "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
+        fprintf( ofs, "    <TextRegion id=\"b%d_p%d\"%s%s>\n", block, para, direct, orient );
+        fprintf( ofs, "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
           left, top,   right, top,   right, bottom,   left, bottom );
       }
 
@@ -349,12 +363,12 @@ int main( int argc, char *argv[] ) {
 //#endif
 
         if ( ! xmlpage )
-          printf( "line %d : %d,%d %d,%d %dx%d+%d+%d%s\n", line, x1, y1, x2, y2, right-left, bottom-top, left, top, xheight );
+          fprintf( ofs, "line %d : %d,%d %d,%d %dx%d+%d+%d%s\n", line, x1, y1, x2, y2, right-left, bottom-top, left, top, xheight );
         else {
-          printf( "      <TextLine id=\"b%d_p%d_l%d\"%s>\n", block, para, line, xheight );
-          printf( "        <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
+          fprintf( ofs, "      <TextLine id=\"b%d_p%d_l%d\"%s>\n", block, para, line, xheight );
+          fprintf( ofs, "        <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
             left, top,   right, top,   right, bottom,   left, bottom );
-          printf( "        <Baseline points=\"%d,%d %d,%d\"/>\n", x1, y1, x2, y2 );
+          fprintf( ofs, "        <Baseline points=\"%d,%d %d,%d\"/>\n", x1, y1, x2, y2 );
         }
 
         int word = 0;
@@ -366,10 +380,10 @@ int main( int argc, char *argv[] ) {
           xmlEncode(stext);
           double conf = iter->Confidence( tesseract::RIL_WORD );
           if ( ! xmlpage )
-            printf( "word %d : %dx%d+%d+%d :: %g :: %s\n", word, right-left, bottom-top, left, top, conf, stext.c_str() );
+            fprintf( ofs, "word %d : %dx%d+%d+%d :: %g :: %s\n", word, right-left, bottom-top, left, top, conf, stext.c_str() );
           else {
-            printf( "        <Word id=\"b%d_p%d_l%d_w%d\">\n", block, para, line, word );
-            printf( "          <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
+            fprintf( ofs, "        <Word id=\"b%d_p%d_l%d_w%d\">\n", block, para, line, word );
+            fprintf( ofs, "          <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
               left, top,   right, top,   right, bottom,   left, bottom );
           }
           delete[] text;
@@ -382,14 +396,15 @@ int main( int argc, char *argv[] ) {
             std::string stext(text);
             xmlEncode(stext);
             if ( ! xmlpage )
-              printf( "glyph %d : %dx%d+%d+%d\n", glyph, right-left, bottom-top, left, top );
+              fprintf( ofs, "glyph %d : %dx%d+%d+%d\n", glyph, right-left, bottom-top, left, top );
             else {
-              printf( "          <Glyph id=\"b%d_p%d_l%d_w%d_g%d\">\n", block, para, line, word, glyph );
-              printf( "            <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
+              fprintf( ofs, "          <Glyph id=\"b%d_p%d_l%d_w%d_g%d\">\n", block, para, line, word, glyph );
+              fprintf( ofs, "            <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
                 left, top,   right, top,   right, bottom,   left, bottom );
-              printf( "            <TextEquiv><Unicode>%s</Unicode></TextEquiv>\n", stext.c_str() );
-              printf( "          </Glyph>\n" );
+              fprintf( ofs, "            <TextEquiv><Unicode>%s</Unicode></TextEquiv>\n", stext.c_str() );
+              fprintf( ofs, "          </Glyph>\n" );
             }
+            delete[] text;
 
             if ( iter->IsAtFinalElement( tesseract::RIL_WORD, tesseract::RIL_SYMBOL ) )
               break;
@@ -397,8 +412,8 @@ int main( int argc, char *argv[] ) {
           }
 
           if ( xmlpage ) {
-            printf( "          <TextEquiv conf=\"%g\"><Unicode>%s</Unicode></TextEquiv>\n", 0.01*conf, stext.c_str() );
-            printf( "        </Word>\n" );
+            fprintf( ofs, "          <TextEquiv conf=\"%g\"><Unicode>%s</Unicode></TextEquiv>\n", 0.01*conf, stext.c_str() );
+            fprintf( ofs, "        </Word>\n" );
           }
 
           if ( iter->IsAtFinalElement( tesseract::RIL_TEXTLINE, tesseract::RIL_WORD ) )
@@ -406,8 +421,18 @@ int main( int argc, char *argv[] ) {
           iter->Next( tesseract::RIL_WORD );
         }
 
-        if ( xmlpage )
-          printf( "      </TextLine>\n" );
+        if ( xmlpage ) {
+          if ( gb_level == 3 ) {
+            const char* text = iter->GetUTF8Text( tesseract::RIL_TEXTLINE );
+            std::string stext(text);
+            stext.erase(std::remove(stext.begin(), stext.end(), '\n'), stext.end());
+            xmlEncode(stext);
+            double conf = iter->Confidence( tesseract::RIL_TEXTLINE );
+            fprintf( ofs, "        <TextEquiv conf=\"%g\"><Unicode>%s</Unicode></TextEquiv>\n", 0.01*conf, stext.c_str() );
+            delete[] text;
+          }
+          fprintf( ofs, "      </TextLine>\n" );
+        }
 
         if ( iter->IsAtFinalElement( tesseract::RIL_PARA, tesseract::RIL_TEXTLINE ) )
           break;
@@ -415,7 +440,7 @@ int main( int argc, char *argv[] ) {
       }
 
       if ( xmlpage && ! gb_regblock )
-        printf( "    </TextRegion>\n" );
+        fprintf( ofs, "    </TextRegion>\n" );
 
       if ( iter->IsAtFinalElement( tesseract::RIL_BLOCK, tesseract::RIL_PARA ) )
         break;
@@ -423,14 +448,21 @@ int main( int argc, char *argv[] ) {
     }
 
     if ( xmlpage && gb_regblock )
-      printf( "    </TextRegion>\n" );
+      fprintf( ofs, "    </TextRegion>\n" );
 
     if ( ! iter->Next( tesseract::RIL_BLOCK ) )
       break;
   }
 
   if ( xmlpage )
-    printf( "  </Page>\n</PcGts>\n" );
+    fprintf( ofs, "  </Page>\n</PcGts>\n" );
+
+  if( ofs != stdout )
+    fclose(ofs);
+  pixDestroy(&image);
+  tessApi->End();
+  delete tessApi;
+  delete iter;
 
   return 0;
 }
