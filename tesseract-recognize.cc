@@ -31,6 +31,9 @@ char gb_default_lang[] = "eng";
 
 char *gb_lang = gb_default_lang;
 int gb_psm = tesseract::PSM_AUTO_ONLY;
+#if TESSERACT_VERSION >= 0x040000
+int gb_oem = tesseract::OEM_LSTM_ONLY;
+#endif
 int gb_level = 4;
 int gb_format = OUT_XMLPAGE;
 bool gb_regblock = true;
@@ -40,6 +43,7 @@ enum {
   OPTION_VERSION    = 'v',
   OPTION_LANG       = 'l',
   OPTION_PSM        = 'S',
+  OPTION_OEM        = 'O',
   OPTION_LEVEL      = 'L',
   OPTION_FORMAT     = 'F',
   OPTION_BLOCKS     = 'B',
@@ -53,6 +57,7 @@ static struct option gb_long_options[] = {
     { "version",     no_argument,       NULL, OPTION_VERSION },
     { "lang",        required_argument, NULL, OPTION_LANG },
     { "psm",         required_argument, NULL, OPTION_PSM },
+    { "oem",         required_argument, NULL, OPTION_OEM },
     { "level",       required_argument, NULL, OPTION_LEVEL },
     { "format",      required_argument, NULL, OPTION_FORMAT },
     { "blocks",      no_argument,       NULL, OPTION_BLOCKS },
@@ -68,14 +73,22 @@ void print_usage() {
   fprintf( stderr, "Usage: %s [OPTIONS] IMAGE\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " -l, --lang LANG      Language used for OCR (def.=%s)\n", gb_lang );
-  fprintf( stderr, " -S, --psm MODE       Page segmentation mode [3-10] (def.=%d)\n", gb_psm );
+  fprintf( stderr, " -S, --psm MODE       Page segmentation mode (def.=%d)\n", gb_psm );
+#if TESSERACT_VERSION >= 0x040000
+  fprintf( stderr, " -O, --oem MODE       OCR engine mode (def.=%d)\n", gb_oem );
+#endif
   fprintf( stderr, " -L, --level LEVEL    Layout level: 1=blocks, 2=paragraphs, 3=lines, 4=words, 5=chars (def.=%d)\n", gb_level );
   fprintf( stderr, " -F, --format FORMAT  Output format, either 'ascii' or 'xmlpage' (def.=xmlpage)\n" );
   fprintf( stderr, " -B, --blocks         Use blocks for the TextRegions (def.=%s)\n", strbool(gb_regblock) );
   fprintf( stderr, " -P, --paragraphs     Use paragraphs for the TextRegions (def.=%s)\n", strbool(!gb_regblock) );
   fprintf( stderr, " -h, --help           Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version        Print version and exit\n" );
+  fprintf( stderr, "\n" );
   int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||;' 1>&2" );
+#if TESSERACT_VERSION >= 0x040000
+  fprintf( stderr, "\n" );
+  r += system( "tesseract --help-oem" );
+#endif
 }
 
 void xmlEncode(std::string& data) {
@@ -108,10 +121,13 @@ int main( int argc, char *argv[] ) {
         break;
       case OPTION_PSM:
         gb_psm = atoi(optarg);
-        /*if( gb_psm < 3 || gb_psm > 10 ) {
+        if( gb_psm < 3 /*|| gb_psm > 10*/ ) {
           fprintf( stderr, "%s: error: invalid page segmentation mode: %s\n", tool, optarg );
           return 1;
-        }*/
+        }
+        break;
+      case OPTION_OEM:
+        gb_oem = atoi(optarg);
         break;
       case OPTION_LEVEL:
         gb_level = atoi(optarg);
@@ -168,13 +184,15 @@ int main( int argc, char *argv[] ) {
 //#else
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
 //#endif
-  //if( tessApi->Init(NULL, gb_lang, tesseract::OEM_LSTM_ONLY ) ) {
+#if TESSERACT_VERSION >= 0x040000
+  if( tessApi->Init(NULL, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
+#else
   if( tessApi->Init(NULL, gb_lang) ) {
+#endif
     fprintf(stderr, "Could not initialize tesseract.\n");
     exit(1);
   }
-  //tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
-  tessApi->SetPageSegMode( tesseract::PSM_AUTO_ONLY );
+  tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
   tessApi->SetImage( image );
 
   /// Perform recognition ///
