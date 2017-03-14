@@ -1,7 +1,7 @@
 /**
  * Tool that does OCR recognition using tesseract and outputs the result in Page XML
  *
- * @version $Version: 2017.01.12$
+ * @version $Version: 2017.03.14$
  * @author Mauricio Villegas <mauvilsa@upv.es>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauvilsa@upv.es>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "$Version: 2017.01.12$";
+static char version[] = "$Version: 2017.03.14$";
 
 #define OUT_ASCII 0
 #define OUT_XMLPAGE 1
@@ -30,11 +30,12 @@ static char version[] = "$Version: 2017.01.12$";
 char gb_default_lang[] = "eng";
 
 char *gb_lang = gb_default_lang;
+char *gb_tessdata = NULL;
 int gb_psm = tesseract::PSM_AUTO_ONLY;
 #if TESSERACT_VERSION >= 0x040000
-int gb_oem = tesseract::OEM_LSTM_ONLY;
+int gb_oem = tesseract::OEM_DEFAULT;
 #endif
-int gb_level = 4;
+int gb_level = 3;
 int gb_format = OUT_XMLPAGE;
 bool gb_regblock = true;
 
@@ -42,19 +43,21 @@ enum {
   OPTION_HELP       = 'h',
   OPTION_VERSION    = 'v',
   OPTION_LANG       = 'l',
-  OPTION_PSM        = 'S',
-  OPTION_OEM        = 'O',
   OPTION_LEVEL      = 'L',
   OPTION_FORMAT     = 'F',
   OPTION_BLOCKS     = 'B',
-  OPTION_PARAGRAPHS = 'P'
+  OPTION_PARAGRAPHS = 'P',
+  OPTION_TESSDATA   = 256,
+  OPTION_PSM             ,
+  OPTION_OEM
 };
 
-static char gb_short_options[] = "hvl:S:L:F:BP";
+static char gb_short_options[] = "hvl:L:F:BP";
 
 static struct option gb_long_options[] = {
     { "help",        no_argument,       NULL, OPTION_HELP },
     { "version",     no_argument,       NULL, OPTION_VERSION },
+    { "tessdata",    required_argument, NULL, OPTION_TESSDATA },
     { "lang",        required_argument, NULL, OPTION_LANG },
     { "psm",         required_argument, NULL, OPTION_PSM },
     { "oem",         required_argument, NULL, OPTION_OEM },
@@ -73,9 +76,10 @@ void print_usage() {
   fprintf( stderr, "Usage: %s [OPTIONS] IMAGE\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " -l, --lang LANG      Language used for OCR (def.=%s)\n", gb_lang );
-  fprintf( stderr, " -S, --psm MODE       Page segmentation mode (def.=%d)\n", gb_psm );
+  fprintf( stderr, "     --tessdata PATH  Location of tessdata (def.=%s)\n", gb_tessdata );
+  fprintf( stderr, "     --psm MODE       Page segmentation mode (def.=%d)\n", gb_psm );
 #if TESSERACT_VERSION >= 0x040000
-  fprintf( stderr, " -O, --oem MODE       OCR engine mode (def.=%d)\n", gb_oem );
+  fprintf( stderr, "     --oem MODE       OCR engine mode (def.=%d)\n", gb_oem );
 #endif
   fprintf( stderr, " -L, --level LEVEL    Layout level: 1=blocks, 2=paragraphs, 3=lines, 4=words, 5=chars (def.=%d)\n", gb_level );
   fprintf( stderr, " -F, --format FORMAT  Output format, either 'ascii' or 'xmlpage' (def.=xmlpage)\n" );
@@ -116,6 +120,9 @@ int main( int argc, char *argv[] ) {
   int n,m;
   while( ( n = getopt_long(argc,argv,gb_short_options,gb_long_options,&m) ) != -1 )
     switch( n ) {
+      case OPTION_TESSDATA:
+        gb_tessdata = optarg;
+        break;
       case OPTION_LANG:
         gb_lang = optarg;
         break;
@@ -185,9 +192,9 @@ int main( int argc, char *argv[] ) {
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
 //#endif
 #if TESSERACT_VERSION >= 0x040000
-  if( tessApi->Init(NULL, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
+  if( tessApi->Init( gb_tessdata, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
 #else
-  if( tessApi->Init(NULL, gb_lang) ) {
+  if( tessApi->Init( gb_tessdata, gb_lang) ) {
 #endif
     fprintf(stderr, "Could not initialize tesseract.\n");
     exit(1);
