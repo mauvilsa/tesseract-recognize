@@ -32,10 +32,8 @@ char gb_default_lang[] = "eng";
 
 char *gb_lang = gb_default_lang;
 char *gb_tessdata = NULL;
-int gb_psm = tesseract::PSM_AUTO_ONLY;
-#if TESSERACT_VERSION >= 0x040000
+int gb_psm = tesseract::PSM_AUTO;
 int gb_oem = tesseract::OEM_DEFAULT;
-#endif
 int gb_level = 3;
 int gb_format = OUT_XMLPAGE;
 bool gb_regblock = true;
@@ -89,7 +87,7 @@ void print_usage() {
   fprintf( stderr, " -h, --help           Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version        Print version and exit\n" );
   fprintf( stderr, "\n" );
-  int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||;' 1>&2" );
+  int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||; s| (Default)||;' 1>&2" );
 #if TESSERACT_VERSION >= 0x040000
   fprintf( stderr, "\n" );
   r += system( "tesseract --help-oem" );
