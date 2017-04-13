@@ -144,7 +144,7 @@ void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLeve
 void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, bool trim = false ) {
   double conf = 0.01*iter->Confidence( iter_level );
   char* text = iter->GetUTF8Text( iter_level );
-  if( ! trim )
+  if ( ! trim )
     page.setTextEquiv( xelem, text, &conf );
   else {
     std::string stext(text);
@@ -165,8 +165,8 @@ int main( int argc, char *argv[] ) {
   int n,m;
   std::stringstream test;
   std::string token;
-  while( ( n = getopt_long(argc,argv,gb_short_options,gb_long_options,&m) ) != -1 )
-    switch( n ) {
+  while ( ( n = getopt_long(argc,argv,gb_short_options,gb_long_options,&m) ) != -1 )
+    switch ( n ) {
       case OPTION_TESSDATA:
         gb_tessdata = optarg;
         break;
@@ -237,13 +237,13 @@ int main( int argc, char *argv[] ) {
   /// Initialize tesseract just for layout or with given language and tessdata path///
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
 
-  if( gb_onlylayout )
+  if ( gb_onlylayout )
     tessApi->InitForAnalysePage();
   else
 #if TESSERACT_VERSION >= 0x040000
-  if( tessApi->Init( gb_tessdata, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
+  if ( tessApi->Init( gb_tessdata, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
 #else
-  if( tessApi->Init( gb_tessdata, gb_lang) ) {
+  if ( tessApi->Init( gb_tessdata, gb_lang) ) {
 #endif
     fprintf( stderr, "%s: error: could not initialize tesseract\n", tool );
     return 1;
@@ -252,7 +252,6 @@ int main( int argc, char *argv[] ) {
   tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
 
   char *ifn = argv[optind++];
-  //Pix *image = NULL;
   PageXML page;
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
@@ -499,7 +498,7 @@ int main( int argc, char *argv[] ) {
   page.write( optind < argc ? argv[optind] : "-" );
 
   /// Release resources ///
-  for( n=0; n<(int)images.size(); n++ )
+  for ( n=0; n<(int)images.size(); n++ )
     pixDestroy(&(images[n].image));
   tessApi->End();
   delete tessApi;
