@@ -15,7 +15,11 @@ tesseract-recognize - A tool that does layout anaysis and/or text recognition us
 
 # VIEWING RESULTS
 
-THe results can be viewed/edited using the Page XML editor available at https://github.com/mauvilsa/nw-page-editor or using other tools that support this format such as http://www.primaresearch.org/tools and https://transkribus.eu/Transkribus/ .
+The results can be viewed/edited using the Page XML editor available at https://github.com/mauvilsa/nw-page-editor or using other tools that support this format such as http://www.primaresearch.org/tools and https://transkribus.eu/Transkribus/ .
+
+# CONTRIBUTING
+
+If you intend to contribute, before any commits be sure to first execute githook-pre-commit to setup (symlink) the pre-commit hook. This hook takes care of automatically updating the tool version.
 
 # COPYRIGHT
 
