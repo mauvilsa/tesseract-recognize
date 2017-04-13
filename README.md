@@ -1,6 +1,6 @@
 # NAME
 
-tesseract-recognize - A tool that does OCR recognition using tesseract and outputs the result in Page XML format.
+tesseract-recognize - A tool that does layout anaysis and/or text recognition using tesseract and outputs the result in Page XML format.
 
 # INSTALLATION AND USAGE
 
@@ -11,7 +11,7 @@ tesseract-recognize - A tool that does OCR recognition using tesseract and outpu
     make install
     
     tesseract-recognize --help
-    tesseract-recognize IMAGE > IMAGE.xml
+    tesseract-recognize IMAGE OUTPUT.xml
 
 # VIEWING RESULTS
 

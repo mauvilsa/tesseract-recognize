@@ -9,61 +9,83 @@
  */
 
 /*** Includes *****************************************************************/
-#include <../tesseract/baseapi.h>
-#include <../leptonica/allheaders.h>
 #include <algorithm>
 #include <string>
+#include <regex>
 #include <getopt.h>
 #include <time.h>
 
-//#ifdef __TESSERACT_SOURCE__
-//#include "pageres.h"
-//#include "ocrrow.h"
-//#endif
+#include <../leptonica/allheaders.h>
+#include <../tesseract/baseapi.h>
+
+#include "PageXML.h"
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
 static char version[] = "$Version: 2017.03.14$";
 
-#define OUT_ASCII 0
-#define OUT_XMLPAGE 1
-
 char gb_default_lang[] = "eng";
+char gb_default_xpath[] = "//_:TextRegion/_:Coords";
 
 char *gb_lang = gb_default_lang;
 char *gb_tessdata = NULL;
 int gb_psm = tesseract::PSM_AUTO;
 int gb_oem = tesseract::OEM_DEFAULT;
-int gb_level = 3;
-int gb_format = OUT_XMLPAGE;
-bool gb_regblock = true;
+bool gb_onlylayout = false;
+char *gb_xpath = gb_default_xpath;
+bool gb_textlevels[] = { false, false, false, false };
+bool gb_textatlayout = true;
 
 enum {
-  OPTION_HELP       = 'h',
-  OPTION_VERSION    = 'v',
-  OPTION_LANG       = 'l',
-  OPTION_LEVEL      = 'L',
-  OPTION_FORMAT     = 'F',
-  OPTION_BLOCKS     = 'B',
-  OPTION_PARAGRAPHS = 'P',
-  OPTION_TESSDATA   = 256,
-  OPTION_PSM             ,
+  LEVEL_REGION = 0,
+  LEVEL_LINE,
+  LEVEL_WORD,
+  LEVEL_GLYPH
+};
+
+const char* levelStrings[] = {
+  "region",
+  "line",
+  "word",
+  "glyph"
+};
+
+inline static int parseLevel( const char* level ) {
+  int levels = sizeof(levelStrings) / sizeof(levelStrings[0]);
+  for( int n=0; n<levels; n++ )
+    if( ! strcmp(levelStrings[n],level) )
+      return n;
+  return -1;
+}
+
+int gb_layoutlevel = LEVEL_LINE;
+
+enum {
+  OPTION_HELP        = 'h',
+  OPTION_VERSION     = 'v',
+  OPTION_LANG        = 'l',
+  OPTION_LAYOUTLEVEL = 'L',
+  OPTION_XPATH       = 'x',
+  OPTION_TESSDATA    = 256,
+  OPTION_TEXTLEVELS       ,
+  OPTION_ONLYLAYOUT       ,
+  OPTION_PSM              ,
   OPTION_OEM
 };
 
 static char gb_short_options[] = "hvl:L:F:BP";
 
 static struct option gb_long_options[] = {
-    { "help",        no_argument,       NULL, OPTION_HELP },
-    { "version",     no_argument,       NULL, OPTION_VERSION },
-    { "tessdata",    required_argument, NULL, OPTION_TESSDATA },
-    { "lang",        required_argument, NULL, OPTION_LANG },
-    { "psm",         required_argument, NULL, OPTION_PSM },
-    { "oem",         required_argument, NULL, OPTION_OEM },
-    { "level",       required_argument, NULL, OPTION_LEVEL },
-    { "format",      required_argument, NULL, OPTION_FORMAT },
-    { "blocks",      no_argument,       NULL, OPTION_BLOCKS },
-    { "paragraphs",  no_argument,       NULL, OPTION_PARAGRAPHS },
+    { "help",         no_argument,       NULL, OPTION_HELP },
+    { "version",      no_argument,       NULL, OPTION_VERSION },
+    { "tessdata",     required_argument, NULL, OPTION_TESSDATA },
+    { "lang",         required_argument, NULL, OPTION_LANG },
+    { "psm",          required_argument, NULL, OPTION_PSM },
+    { "oem",          required_argument, NULL, OPTION_OEM },
+    { "layout-level", required_argument, NULL, OPTION_LAYOUTLEVEL },
+    { "text-levels",  required_argument, NULL, OPTION_TEXTLEVELS },
+    { "only-layout",  no_argument,       NULL, OPTION_ONLYLAYOUT },
+    { "xpath",        required_argument, NULL, OPTION_XPATH },
     { 0, 0, 0, 0 }
   };
 
@@ -71,8 +93,8 @@ static struct option gb_long_options[] = {
 #define strbool( cond ) ( ( cond ) ? "true" : "false" )
 
 void print_usage() {
-  fprintf( stderr, "Description: OCR recognition using tesseract\n" );
-  fprintf( stderr, "Usage: %s [OPTIONS] IMAGE [OUTPUT]\n", tool );
+  fprintf( stderr, "Description: Layout analysis and text recognition using tesseract\n" );
+  fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE|PAGEXML) [OUTPUT]\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " -l, --lang LANG      Language used for OCR (def.=%s)\n", gb_lang );
   fprintf( stderr, "     --tessdata PATH  Location of tessdata (def.=%s)\n", gb_tessdata );
@@ -80,45 +102,69 @@ void print_usage() {
 #if TESSERACT_VERSION >= 0x040000
   fprintf( stderr, "     --oem MODE       OCR engine mode (def.=%d)\n", gb_oem );
 #endif
-  fprintf( stderr, " -L, --level LEVEL    Layout level: 1=blocks, 2=paragraphs, 3=lines, 4=words, 5=chars (def.=%d)\n", gb_level );
-  fprintf( stderr, " -F, --format FORMAT  Output format, either 'ascii' or 'xmlpage' (def.=xmlpage)\n" );
-  fprintf( stderr, " -B, --blocks         Use blocks for the TextRegions (def.=%s)\n", strbool(gb_regblock) );
-  fprintf( stderr, " -P, --paragraphs     Use paragraphs for the TextRegions (def.=%s)\n", strbool(!gb_regblock) );
+  fprintf( stderr, " -L, --layout-level LEVEL    Layout output level: region, line, word, glyph (def.=%s)\n", levelStrings[gb_layoutlevel] );
+  fprintf( stderr, "     --text-levels L1[,L2]+  Text output level(s): region, line, word, glyph (def.=layout-level)\n" );
+  fprintf( stderr, "     --only-layout    Only perform layout analysis, no text recognition (def.=%s)\n", strbool(gb_onlylayout) );
+  fprintf( stderr, " -x, --xpath XPATH    xpath for selecting elements to process (def.=%s)\n", gb_xpath );
   fprintf( stderr, " -h, --help           Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version        Print version and exit\n" );
   fprintf( stderr, "\n" );
   int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||; s| (Default)||;' 1>&2" );
+  if( r != 0 )
+    fprintf( stderr, "error: tesseract command not in path?\n" );
 #if TESSERACT_VERSION >= 0x040000
   fprintf( stderr, "\n" );
   r += system( "tesseract --help-oem" );
 #endif
 }
 
-void xmlEncode(std::string& data) {
-    std::string buffer;
-    buffer.reserve(data.size());
-    for(size_t pos = 0; pos != data.size(); ++pos) {
-        switch(data[pos]) {
-            case '&':  buffer.append("&amp;");       break;
-            case '\"': buffer.append("&quot;");      break;
-            case '\'': buffer.append("&apos;");      break;
-            case '<':  buffer.append("&lt;");        break;
-            case '>':  buffer.append("&gt;");        break;
-            default:   buffer.append(&data[pos], 1); break;
-        }
-    }
-    data.swap(buffer);
+
+void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x = 0, int y = 0 ) {
+  int left, top, right, bottom;
+  iter->BoundingBox( iter_level, &left, &top, &right, &bottom );
+  std::vector<cv::Point2f> points = {
+    cv::Point2f(x+left,y+top),
+    cv::Point2f(x+right,y+top),
+    cv::Point2f(x+right,y+bottom),
+    cv::Point2f(x+left,y+bottom) };
+  page.setCoords( xelem, points );
 }
+
+void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x = 0, int y = 0 ) {
+  // @todo guaranty that baseline+cords form a polystripe
+  setCoords( iter, iter_level, page, xelem, x, y );
+  int x1, y1, x2, y2;
+  iter->Baseline( iter_level, &x1, &y1, &x2, &y2 );
+  std::vector<cv::Point2f> points = {
+    cv::Point2f(x+x1,y+y1),
+    cv::Point2f(x+x2,y+y2) };
+  page.setBaseline( xelem, points );
+}
+
+void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, bool trim = false ) {
+  double conf = 0.01*iter->Confidence( iter_level );
+  char* text = iter->GetUTF8Text( iter_level );
+  if( ! trim )
+    page.setTextEquiv( xelem, text, &conf );
+  else {
+    std::string stext(text);
+    stext = std::regex_replace( stext, std::regex("^\\s+|\\s+$"), "$1" );
+    page.setTextEquiv( xelem, stext.c_str(), &conf );
+  }
+  delete[] text;
+}
+
 
 /*** Program ******************************************************************/
 int main( int argc, char *argv[] ) {
-  int err = 0;
 
   /// Disable debugging and informational messages from Leptonica. ///
   setMsgSeverity(L_SEVERITY_ERROR);
 
   /// Parse input arguments ///
   int n,m;
+  std::stringstream test;
+  std::string token;
   while( ( n = getopt_long(argc,argv,gb_short_options,gb_long_options,&m) ) != -1 )
     switch( n ) {
       case OPTION_TESSDATA:
@@ -137,28 +183,30 @@ int main( int argc, char *argv[] ) {
       case OPTION_OEM:
         gb_oem = atoi(optarg);
         break;
-      case OPTION_LEVEL:
-        gb_level = atoi(optarg);
-        if( gb_level < 1 || gb_level > 5 ) {
-          fprintf( stderr, "%s: error: invalid layout level: %s\n", tool, optarg );
+      case OPTION_LAYOUTLEVEL:
+        gb_layoutlevel = parseLevel(optarg);
+        if( gb_layoutlevel == -1 ) {
+          fprintf( stderr, "%s: error: invalid level: %s\n", tool, optarg );
           return 1;
         }
         break;
-      case OPTION_FORMAT:
-        if( ! strcasecmp(optarg,"ascii") )
-          gb_format = OUT_ASCII;
-        else if( ! strcasecmp(optarg,"xmlpage") )
-          gb_format = OUT_XMLPAGE;
-        else {
-          fprintf( stderr, "%s: error: unknown output format: %s\n", tool, optarg );
-          return 1;
+      case OPTION_TEXTLEVELS:
+        test = std::stringstream(optarg);
+        while( std::getline(test, token, ',') ) {
+          int textlevel = parseLevel(token.c_str());
+          if( textlevel == -1 ) {
+            fprintf( stderr, "%s: error: invalid level: %s\n", tool, token.c_str() );
+            return 1;
+          }
+          gb_textlevels[textlevel] = true;
+          gb_textatlayout = false;
         }
         break;
-      case OPTION_BLOCKS:
-        gb_regblock = true;
+      case OPTION_ONLYLAYOUT:
+        gb_onlylayout = true;
         break;
-      case OPTION_PARAGRAPHS:
-        gb_regblock = false;
+      case OPTION_XPATH:
+        gb_xpath = optarg;
         break;
       case OPTION_HELP:
         print_usage();
@@ -176,90 +224,232 @@ int main( int argc, char *argv[] ) {
         return 1;
     }
 
-  if( optind >= argc ) {
-    fprintf( stderr, "%s: error: expected an image to process, see usage with --help\n", tool );
+  if ( gb_textatlayout )
+    gb_textlevels[gb_layoutlevel] = true;
+
+  /// Check that there is at least one and at most two non-option arguments /// 
+  if ( optind >= argc || argc - optind > 2 ) {
+    fprintf( stderr, "%s: error: incorrect input arguments, see usage with --help\n", tool );
     return 1;
   }
 
-  /// Read image ///
   char *ifn = argv[optind++];
-  Pix *image = pixRead( ifn );
-  if( image == NULL )
-    return 1;
+  Pix *image = NULL;
+  PageXML page;
+  std::regex reXml(".+\\.xml$",std::regex_constants::icase);
+  std::cmatch base_match;
+  bool input_xml = std::regex_match(ifn,base_match,reXml);
 
-  /// Initialize tesseract with given language, without specifying tessdata path ///
-//#ifdef __TESSERACT_SOURCE__
-//  tesseract::MyTessBaseAPI *tessApi = new tesseract::MyTessBaseAPI();
-//#else
+  /// Read input xml ///
+  if ( input_xml )
+    page.loadXml( ifn );
+
+  /// Read input image ///
+  else {
+    image = pixRead( ifn );
+    if ( image == NULL ) {
+      fprintf( stderr, "%s: error: problems reading image\n", tool );
+      return 1;
+    }
+  }
+
+  /// Initialize tesseract just for layout or with given language and tessdata path///
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
-//#endif
+
+  if( gb_onlylayout )
+    tessApi->InitForAnalysePage();
+  else
 #if TESSERACT_VERSION >= 0x040000
   if( tessApi->Init( gb_tessdata, gb_lang, (tesseract::OcrEngineMode)gb_oem ) ) {
 #else
   if( tessApi->Init( gb_tessdata, gb_lang) ) {
 #endif
-    fprintf(stderr, "Could not initialize tesseract.\n");
-    exit(1);
-  }
-  tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
-  tessApi->SetImage( image );
-
-  /// Perform recognition ///
-  tessApi->Recognize( 0 );
-
-//#ifdef __TESSERACT_SOURCE__
-//  tesseract::MyResultIterator *iter = tessApi->GetIterator();
-//#else
-  tesseract::ResultIterator* iter = tessApi->GetIterator();
-//#endif
-
-  /// Output result in the selected format ///
-  bool xmlpage = gb_format == OUT_XMLPAGE ? true : false ;
-
-  /// Open file for writing output ///
-  FILE *ofs = stdout;
-  if( optind < argc &&
-      strcmp("-",argv[optind]) &&
-      (ofs=fopen(argv[optind],"wb")) == NULL ) {
-    fprintf( stderr, "%s: error: unable to write to file %s\n", tool, argv[optind] );
+    fprintf( stderr, "%s: error: could not initialize tesseract\n", tool );
     return 1;
   }
 
-  /// Output results ///
-  if ( xmlpage ) {
-    char buf[80];
-    time_t now = time(0);
-    struct tm tstruct;
-    tstruct = *localtime( &now );
-    strftime( buf, sizeof(buf), "%Y-%m-%dT%X", &tstruct );
+  tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
+  tesseract::ResultIterator* iter = NULL;
 
-    fprintf( ofs, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" );
-    fprintf( ofs, "<PcGts xmlns=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd\">\n" );
-    fprintf( ofs, "  <Metadata>\n" );
-    fprintf( ofs, "    <Creator>%s</Creator>\n", tool );
-    fprintf( ofs, "    <Created>%s</Created>\n", buf );
-    fprintf( ofs, "    <LastChange>%s</LastChange>\n", buf );
-    fprintf( ofs, "  </Metadata>\n" );
-    fprintf( ofs, "  <Page imageFilename=\"%s\" imageWidth=\"%d\" imageHeight=\"%d\">\n", ifn, image->w, image->h );
+  if ( input_xml ) {
+    std::vector<NamedImage> images = page.crop( gb_xpath );
+
+    for( int n=(int)images.size()-1; n>=0; n-- ) {
+      tessApi->SetImage( images[n].image );
+      xmlNodePtr node = images[n].node->parent;
+
+      int node_level = -1;
+      if ( page.nodeIs( node, "TextRegion" ) )
+        node_level = LEVEL_REGION;
+      else if ( page.nodeIs( node, "TextLine" ) )
+        node_level = LEVEL_LINE;
+      else if ( page.nodeIs( node, "Word" ) )
+        node_level = LEVEL_WORD;
+      else if ( page.nodeIs( node, "Glyph" ) )
+        node_level = LEVEL_GLYPH;
+
+      /// Perform layout analysis ///
+      if ( gb_onlylayout )
+        iter = (tesseract::ResultIterator*)( tessApi->AnalyseLayout() );
+
+      /// Perform recognition ///
+      else {
+        tessApi->Recognize( 0 );
+        iter = tessApi->GetIterator();
+      }
+
+      /// Loop through blocks ///
+      int block = 0;
+      if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) )
+        while ( gb_layoutlevel >= LEVEL_REGION ) {
+          PolyBlockType btype = iter->BlockType();
+          if ( btype > PT_CAPTION_TEXT ) {
+            if ( ! iter->Next( tesseract::RIL_BLOCK ) )
+              break;
+            continue;
+          }
+
+          block++;
+
+          /// Add block as TextRegion element ///
+          //char rid[24];
+          //sprintf( rid, "b%d", block );
+          //xmlNodePtr xreg = page.addTextRegion( "//_:Page", rid );
+          xmlNodePtr xreg = NULL;
+          std::string rid;
+          if ( node_level == LEVEL_REGION ) {
+            xreg = node;
+            rid = std::string(images[n].id);
+          }
+
+          /// Set block bounding box and text ///
+          //setCoords( iter, tesseract::RIL_BLOCK, page, xreg, images[n].x, images[n].y );
+          //if ( ! gb_onlylayout && gb_textlevels[LEVEL_REGION] )
+          //  setTextEquiv( iter, tesseract::RIL_BLOCK, page, xreg, true );
+          // @todo Given region could be split into different blocks, so need to join recognized text into a single TextEquiv element, or split the region into multiple regions? not!
+
+          /// Loop through paragraphs in current block ///
+          int para = 0;
+          while ( gb_layoutlevel >= LEVEL_REGION ) {
+            para++;
+
+            /// Loop through lines in current paragraph ///
+            int line = 0;
+            while ( gb_layoutlevel >= LEVEL_LINE ) {
+              line++;
+
+              //char lid[32];
+              //sprintf( lid, "b%d_p%d_l%d", block, para, line );
+              //xmlNodePtr xline = page.addTextLine( xreg, lid );
+
+              xmlNodePtr xline = NULL;
+              std::string lid;
+
+              /// Set xline to the current selected node
+              if ( node_level == LEVEL_LINE )
+                xline = node;
+                // @todo but what if given line is split into multiple lines?
+
+              /// Add TextLine element ///
+              else {
+                lid = rid + "_b" + std::to_string(block) + "_p" + std::to_string(para) + "_l" + std::to_string(line);
+                xline = page.addTextLine( xreg, lid.c_str() );
+              }
+
+              /// Set line bounding box, baseline and text ///
+              setLineCoords( iter, tesseract::RIL_TEXTLINE, page, xline, images[n].x, images[n].y );
+              if ( ! gb_onlylayout && gb_textlevels[LEVEL_LINE] )
+                setTextEquiv( iter, tesseract::RIL_TEXTLINE, page, xline, true );
+
+              /// Loop through words in current text line ///
+              while ( gb_layoutlevel >= LEVEL_WORD ) {
+                xmlNodePtr xword = NULL;
+
+                /// Set xword to the current selected node
+                if ( node_level == LEVEL_WORD )
+                  xword = node;
+                  // @todo but what if given word is split into multiple words?
+
+                /// Add Word element ///
+                else
+                  xword = page.addWord( xline );
+
+                /// Set word bounding box and text ///
+                setCoords( iter, tesseract::RIL_WORD, page, xword, images[n].x, images[n].y );
+                if ( ! gb_onlylayout && gb_textlevels[LEVEL_WORD] )
+                  setTextEquiv( iter, tesseract::RIL_WORD, page, xword );
+
+                /// Loop through symbols in current word ///
+                while ( gb_layoutlevel >= LEVEL_GLYPH ) {
+                  xmlNodePtr xglyph = NULL;
+
+                  /// Set xglyph to the current selected node
+                  if ( node_level == LEVEL_GLYPH )
+                    xglyph = node;
+                    // @todo but what if given glyph is split into multiple glyphs?
+
+                  /// Add Glyph element ///
+                  else
+                    xglyph = page.addGlyph( xword );
+
+                  /// Set symbol bounding box and text ///
+                  setCoords( iter, tesseract::RIL_SYMBOL, page, xglyph, images[n].x, images[n].y );
+                  if ( ! gb_onlylayout && gb_textlevels[LEVEL_GLYPH] )
+                    setTextEquiv( iter, tesseract::RIL_SYMBOL, page, xglyph );
+
+                  if ( iter->IsAtFinalElement( tesseract::RIL_WORD, tesseract::RIL_SYMBOL ) )
+                    break;
+                  iter->Next( tesseract::RIL_SYMBOL );
+                } // while ( gb_layoutlevel >= LEVEL_GLYPH ) {
+
+                if ( iter->IsAtFinalElement( tesseract::RIL_TEXTLINE, tesseract::RIL_WORD ) )
+                  break;
+                iter->Next( tesseract::RIL_WORD );
+              } // while ( gb_layoutlevel >= LEVEL_WORD ) {
+
+              if ( iter->IsAtFinalElement( tesseract::RIL_PARA, tesseract::RIL_TEXTLINE ) )
+                break;
+              iter->Next( tesseract::RIL_TEXTLINE );
+            } // while ( gb_layoutlevel >= LEVEL_LINE ) {
+
+            if ( iter->IsAtFinalElement( tesseract::RIL_BLOCK, tesseract::RIL_PARA ) )
+              break;
+            iter->Next( tesseract::RIL_PARA );
+          } // while ( gb_layoutlevel >= LEVEL_REGION ) {
+
+          if ( ! iter->Next( tesseract::RIL_BLOCK ) )
+            break;
+        } // while ( gb_layoutlevel >= LEVEL_REGION ) {
+
+      pixDestroy(&(images[n].image));
+    } // for( int n=(int)images.size()-1; n>=0; n-- ) {
+  } // if ( input_xml ) {
+  else {
+
+  tessApi->SetImage( image );
+
+  /// Perform layout analysis ///
+  if ( gb_onlylayout )
+    iter = (tesseract::ResultIterator*)( tessApi->AnalyseLayout() );
+
+  /// Perform recognition ///
+  else {
+    tessApi->Recognize( 0 );
+    iter = tessApi->GetIterator();
   }
 
-  int x1, y1, x2, y2;
-  int left, top, right, bottom;
-  tesseract::Orientation orientation;
-  tesseract::WritingDirection writing_direction;
-  tesseract::TextlineOrder textline_order;
-  float deskew_angle;
-  tesseract::ParagraphJustification just;
-  bool is_list, is_crown;
-  int indent;
+  /// Create Page XML object with results ///
+  char creator[128];
+  if ( gb_onlylayout )
+    snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s", tool, version+10, tesseract::TessBaseAPI::Version() );
+  else
+    snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s lang=%s", tool, version+10, tesseract::TessBaseAPI::Version(), gb_lang );
+  page.newXml( creator, ifn, pixGetWidth(image), pixGetHeight(image) );
 
-  char direct[48];
-  char orient[48];
-  char xheight[48]; xheight[0] = '\0';
-
+  /// Loop through blocks ///
   int block = 0;
   if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) )
-  while ( gb_level > 0 ) {
+  while ( gb_layoutlevel >= LEVEL_REGION ) {
 /*
  0 PT_UNKNOWN,        // Type is not yet known. Keep as the first element.
  1 PT_FLOWING_TEXT,   // Text that lives inside a column.
@@ -284,180 +474,111 @@ int main( int argc, char *argv[] ) {
       continue;
     }
 
-    block ++;
-    iter->BoundingBox( tesseract::RIL_BLOCK, &left, &top, &right, &bottom );
+    block++;
+
+    /// Add block as TextRegion element ///
+    char rid[24];
+    sprintf( rid, "b%d", block );
+    xmlNodePtr xreg = page.addTextRegion( "//_:Page", rid );
+
+    /// Set block bounding box and text ///
+    setCoords( iter, tesseract::RIL_BLOCK, page, xreg );
+    if ( ! gb_onlylayout && gb_textlevels[LEVEL_REGION] )
+      setTextEquiv( iter, tesseract::RIL_BLOCK, page, xreg, true );
+
+    /// Set rotation and reading direction ///
+    /*tesseract::Orientation orientation;
+    tesseract::WritingDirection writing_direction;
+    tesseract::TextlineOrder textline_order;
+    float deskew_angle;
     iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
-    if ( xmlpage ) {
-      switch( writing_direction ) {
-        case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT:
-          direct[0] = '\0';
-          break;
-        case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT:
-          sprintf( direct, " readingDirection=\"right-to-left\"" );
-          break;
-        case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM:
-          sprintf( direct, " readingDirection=\"top-to-bottom\"" );
-          break;
-      }
-      switch( orientation ) {
-        case tesseract::ORIENTATION_PAGE_UP:
-          orient[0] = '\0';
-          break;
-        case tesseract::ORIENTATION_PAGE_RIGHT:
-          sprintf( orient, " readingOrientation=\"-90\"" );
-          break;
-        case tesseract::ORIENTATION_PAGE_LEFT:
-          sprintf( orient, " readingOrientation=\"90\"" );
-          break;
-        case tesseract::ORIENTATION_PAGE_DOWN:
-          sprintf( orient, " readingOrientation=\"180\"" );
-          break;
-      }
+    PAGEXML_READ_DIRECTION direct = PAGEXML_READ_DIRECTION_LTR;
+    float orient = 0.0;
+    switch( writing_direction ) {
+      case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: direct = PAGEXML_READ_DIRECTION_LTR; break;
+      case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: direct = PAGEXML_READ_DIRECTION_RTL; break;
+      case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: direct = PAGEXML_READ_DIRECTION_TTB; break;
     }
-
-    if ( ! xmlpage )
-      fprintf( ofs, "block %d : %dx%d+%d+%d\n", block, right-left, bottom-top, left, top );
-    else if ( gb_regblock ) {
-      fprintf( ofs, "    <TextRegion id=\"b%d\"%s%s>\n", block, direct, orient );
-      fprintf( ofs, "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
-        left, top,   right, top,   right, bottom,   left, bottom );
+    switch( orientation ) {
+      case tesseract::ORIENTATION_PAGE_UP:    orient = 0.0;   break;
+      case tesseract::ORIENTATION_PAGE_RIGHT: orient = -90.0; break;
+      case tesseract::ORIENTATION_PAGE_LEFT:  orient = 90.0;  break;
+      case tesseract::ORIENTATION_PAGE_DOWN:  orient = 180.0; break;
     }
+    page.setRotation( xreg, orient );
+    page.setReadingDirection( xreg, direct );*/
 
+    /// Loop through paragraphs in current block ///
     int para = 0;
-    while ( gb_level > 1 ) {
-      para ++;
-      iter->BoundingBox( tesseract::RIL_PARA, &left, &top, &right, &bottom );
-      iter->ParagraphInfo( &just, &is_list, &is_crown, &indent );
-      if ( ! xmlpage ) {
-        fprintf( ofs, "paragraph %d :", para );
-        if ( just == tesseract::JUSTIFICATION_LEFT )
-          fprintf( ofs, " left" );
-        else if ( just == tesseract::JUSTIFICATION_CENTER )
-          fprintf( ofs, " center" );
-        else if ( just == tesseract::JUSTIFICATION_RIGHT )
-          fprintf( ofs, " right" );
-        if ( is_list )
-          fprintf( ofs, " list" );
-        if ( is_crown )
-          fprintf( ofs, " crown" );
-        else if ( indent != 0 )
-          fprintf( ofs, " %d", indent );
-        fprintf( ofs, " %dx%d+%d+%d\n", right-left, bottom-top, left, top );
-      }
-      else if ( ! gb_regblock ) {
-        fprintf( ofs, "    <TextRegion id=\"b%d_p%d\"%s%s>\n", block, para, direct, orient );
-        fprintf( ofs, "      <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
-          left, top,   right, top,   right, bottom,   left, bottom );
-      }
+    while ( gb_layoutlevel >= LEVEL_REGION ) {
+      para++;
 
+      /// Loop through lines in current paragraph ///
       int line = 0;
-      while ( gb_level > 2 ) {
-        line ++;
-        iter->BoundingBox( tesseract::RIL_TEXTLINE, &left, &top, &right, &bottom );
-        iter->Baseline( tesseract::RIL_TEXTLINE, &x1, &y1, &x2, &y2 );
+      while ( gb_layoutlevel >= LEVEL_LINE ) {
+        line++;
 
-//#ifdef __TESSERACT_SOURCE__
-//        sprintf( xheight, xmlpage ? " custom=\"x-height: %gpx;\"" : " %g", iter->getXHeight() );
-//#endif
+        /// Add TextLine element ///
+        char lid[32];
+        sprintf( lid, "b%d_p%d_l%d", block, para, line );
+        xmlNodePtr xline = page.addTextLine( xreg, lid );
 
-        if ( ! xmlpage )
-          fprintf( ofs, "line %d : %d,%d %d,%d %dx%d+%d+%d%s\n", line, x1, y1, x2, y2, right-left, bottom-top, left, top, xheight );
-        else {
-          fprintf( ofs, "      <TextLine id=\"b%d_p%d_l%d\"%s>\n", block, para, line, xheight );
-          fprintf( ofs, "        <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
-            left, top,   right, top,   right, bottom,   left, bottom );
-          fprintf( ofs, "        <Baseline points=\"%d,%d %d,%d\"/>\n", x1, y1, x2, y2 );
-        }
+        /// Set line bounding box, baseline and text ///
+        setLineCoords( iter, tesseract::RIL_TEXTLINE, page, xline );
+        if ( ! gb_onlylayout && gb_textlevels[LEVEL_LINE] )
+          setTextEquiv( iter, tesseract::RIL_TEXTLINE, page, xline, true );
 
-        int word = 0;
-        while ( gb_level > 3 ) {
-          word ++;
-          iter->BoundingBox( tesseract::RIL_WORD, &left, &top, &right, &bottom );
-          const char* text = iter->GetUTF8Text( tesseract::RIL_WORD );
-          std::string stext(text);
-          xmlEncode(stext);
-          double conf = iter->Confidence( tesseract::RIL_WORD );
-          if ( ! xmlpage )
-            fprintf( ofs, "word %d : %dx%d+%d+%d :: %g :: %s\n", word, right-left, bottom-top, left, top, conf, stext.c_str() );
-          else {
-            fprintf( ofs, "        <Word id=\"b%d_p%d_l%d_w%d\">\n", block, para, line, word );
-            fprintf( ofs, "          <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
-              left, top,   right, top,   right, bottom,   left, bottom );
-          }
-          delete[] text;
+        /// Loop through words in current text line ///
+        while ( gb_layoutlevel >= LEVEL_WORD ) {
+          xmlNodePtr xword = page.addWord( xline );
 
-          int glyph = 0;
-          while ( gb_level > 4 ) {
-            glyph ++;
-            iter->BoundingBox( tesseract::RIL_SYMBOL, &left, &top, &right, &bottom );
-            const char* text = iter->GetUTF8Text( tesseract::RIL_SYMBOL );
-            std::string stext(text);
-            xmlEncode(stext);
-            if ( ! xmlpage )
-              fprintf( ofs, "glyph %d : %dx%d+%d+%d\n", glyph, right-left, bottom-top, left, top );
-            else {
-              fprintf( ofs, "          <Glyph id=\"b%d_p%d_l%d_w%d_g%d\">\n", block, para, line, word, glyph );
-              fprintf( ofs, "            <Coords points=\"%d,%d %d,%d %d,%d %d,%d\"/>\n",
-                left, top,   right, top,   right, bottom,   left, bottom );
-              fprintf( ofs, "            <TextEquiv><Unicode>%s</Unicode></TextEquiv>\n", stext.c_str() );
-              fprintf( ofs, "          </Glyph>\n" );
-            }
-            delete[] text;
+          /// Set word bounding box and text ///
+          setCoords( iter, tesseract::RIL_WORD, page, xword );
+          if ( ! gb_onlylayout && gb_textlevels[LEVEL_WORD] )
+            setTextEquiv( iter, tesseract::RIL_WORD, page, xword );
+
+          /// Loop through symbols in current word ///
+          while ( gb_layoutlevel >= LEVEL_GLYPH ) {
+            xmlNodePtr xglyph = page.addGlyph( xword );
+
+            /// Set symbol bounding box and text ///
+            setCoords( iter, tesseract::RIL_SYMBOL, page, xglyph );
+            if ( ! gb_onlylayout && gb_textlevels[LEVEL_GLYPH] )
+              setTextEquiv( iter, tesseract::RIL_SYMBOL, page, xglyph );
 
             if ( iter->IsAtFinalElement( tesseract::RIL_WORD, tesseract::RIL_SYMBOL ) )
               break;
             iter->Next( tesseract::RIL_SYMBOL );
-          }
-
-          if ( xmlpage ) {
-            fprintf( ofs, "          <TextEquiv conf=\"%g\"><Unicode>%s</Unicode></TextEquiv>\n", 0.01*conf, stext.c_str() );
-            fprintf( ofs, "        </Word>\n" );
-          }
+          } // while ( gb_layoutlevel >= LEVEL_GLYPH ) {
 
           if ( iter->IsAtFinalElement( tesseract::RIL_TEXTLINE, tesseract::RIL_WORD ) )
             break;
           iter->Next( tesseract::RIL_WORD );
-        }
-
-        if ( xmlpage ) {
-          if ( gb_level == 3 ) {
-            const char* text = iter->GetUTF8Text( tesseract::RIL_TEXTLINE );
-            std::string stext(text);
-            stext.erase(std::remove(stext.begin(), stext.end(), '\n'), stext.end());
-            xmlEncode(stext);
-            double conf = iter->Confidence( tesseract::RIL_TEXTLINE );
-            fprintf( ofs, "        <TextEquiv conf=\"%g\"><Unicode>%s</Unicode></TextEquiv>\n", 0.01*conf, stext.c_str() );
-            delete[] text;
-          }
-          fprintf( ofs, "      </TextLine>\n" );
-        }
+        } // while ( gb_layoutlevel >= LEVEL_WORD ) {
 
         if ( iter->IsAtFinalElement( tesseract::RIL_PARA, tesseract::RIL_TEXTLINE ) )
           break;
         iter->Next( tesseract::RIL_TEXTLINE );
-      }
-
-      if ( xmlpage && ! gb_regblock )
-        fprintf( ofs, "    </TextRegion>\n" );
+      } // while ( gb_layoutlevel >= LEVEL_LINE ) {
 
       if ( iter->IsAtFinalElement( tesseract::RIL_BLOCK, tesseract::RIL_PARA ) )
         break;
       iter->Next( tesseract::RIL_PARA );
-    }
-
-    if ( xmlpage && gb_regblock )
-      fprintf( ofs, "    </TextRegion>\n" );
+    } // while ( gb_layoutlevel >= LEVEL_REGION ) {
 
     if ( ! iter->Next( tesseract::RIL_BLOCK ) )
       break;
+  } // while ( gb_layoutlevel >= LEVEL_REGION ) {
+
   }
 
-  if ( xmlpage )
-    fprintf( ofs, "  </Page>\n</PcGts>\n" );
+  /// Write resulting XML ///
+  page.setLastChange();
+  page.write( optind < argc ? argv[optind] : "-" );
 
-  if( ofs != stdout )
-    fclose(ofs);
-  pixDestroy(&image);
+  /// Release resources ///
+  if ( image != NULL )
+    pixDestroy(&image);
   tessApi->End();
   delete tessApi;
   delete iter;
