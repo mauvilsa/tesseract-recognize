@@ -13,7 +13,6 @@
 #include <string>
 #include <regex>
 #include <getopt.h>
-#include <unistd.h>
 
 #include <../leptonica/allheaders.h>
 #include <../tesseract/baseapi.h>
@@ -251,24 +250,21 @@ int main( int argc, char *argv[] ) {
 
   tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
 
-  char *ifn = argv[optind++];
+  char *input_file = argv[optind++];
   PageXML page;
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
 
   std::regex reXml(".+\\.xml$|^-$",std::regex_constants::icase);
   std::cmatch base_match;
-  bool input_xml = std::regex_match(ifn,base_match,reXml);
+  bool input_xml = std::regex_match(input_file,base_match,reXml);
 
   /// Input is xml ///
   if ( input_xml ) {
     try {
-      if ( ! strcmp(ifn,"-") )
-        page.loadXml( STDIN_FILENO );
-      else
-        page.loadXml( ifn );
+      page.loadXml( input_file ); // if input_file is "-" xml is read from stdin
     } catch ( const std::exception& e ) {
-      fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, ifn, e.what() );
+      fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
       return 1;
     }
     images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str() );
@@ -278,9 +274,9 @@ int main( int argc, char *argv[] ) {
   else {
     /// Read input image ///
     NamedImage namedimage;
-    namedimage.image = pixRead( ifn );
+    namedimage.image = pixRead( input_file );
     if ( namedimage.image == NULL ) {
-      fprintf( stderr, "%s: error: problems reading image: %s\n", tool, ifn );
+      fprintf( stderr, "%s: error: problems reading image: %s\n", tool, input_file );
       return 1;
     }
     images.push_back( namedimage );
@@ -291,7 +287,7 @@ int main( int argc, char *argv[] ) {
       snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s", tool, version+10, tesseract::TessBaseAPI::Version() );
     else
       snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s lang=%s", tool, version+10, tesseract::TessBaseAPI::Version(), gb_lang );
-    page.newXml( creator, ifn, pixGetWidth(namedimage.image), pixGetHeight(namedimage.image) );
+    page.newXml( creator, input_file, pixGetWidth(namedimage.image), pixGetHeight(namedimage.image) );
   }
 
   /// Loop through all images to process ///

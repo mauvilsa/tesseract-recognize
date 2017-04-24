@@ -9,6 +9,7 @@
 #include "PageXML.h"
 
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <stdexcept>
 #include <regex>
@@ -273,12 +274,15 @@ void PageXML::newXml( const char* creator, const char* image, const int imgW, co
  * @param fname  File name of the XML file to read.
  */
 void PageXML::loadXml( const char* fname ) {
-  release();
+  if ( ! strcmp(fname,"-") ) {
+    loadXml( STDIN_FILENO );
+    return;
+  }
 
-  if( strrchr(fname,'/') != NULL )
+  if ( strrchr(fname,'/') != NULL )
     xmldir = strndup(fname,strrchr(fname,'/')-fname);
   FILE *file;
-  if( (file=fopen(fname,"rb")) == NULL )
+  if ( (file=fopen(fname,"rb")) == NULL )
     throw runtime_error( string("PageXML.loadXml: unable to open file: ") + fname );
   loadXml( fileno(file) );
   fclose(file);
