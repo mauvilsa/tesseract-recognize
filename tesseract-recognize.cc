@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract using Page XML format
  *
- * @version $Version: 2017.04.13$
+ * @version $Version: 2017.04.24$
  * @author Mauricio Villegas <mauvilsa@upv.es>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauvilsa@upv.es>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "$Version: 2017.04.13$";
+static char version[] = "$Version: 2017.04.24$";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -256,13 +256,21 @@ int main( int argc, char *argv[] ) {
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
 
-  std::regex reXml(".+\\.xml$",std::regex_constants::icase);
+  std::regex reXml(".+\\.xml$|^-$",std::regex_constants::icase);
   std::cmatch base_match;
   bool input_xml = std::regex_match(ifn,base_match,reXml);
 
   /// Input is xml ///
   if ( input_xml ) {
-    page.loadXml( ifn );
+    try {
+      if ( ! strcmp(ifn,"-") )
+        page.loadXml( STDIN_FILENO );
+      else
+        page.loadXml( ifn );
+    } catch ( const std::exception& e ) {
+      fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, ifn, e.what() );
+      return 1;
+    }
     images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str() );
   }
 
