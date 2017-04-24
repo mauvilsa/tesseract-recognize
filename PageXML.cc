@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Revision:: 243   $$Date:: 2017-04-13 #$
+ * @version $Revision:: 245   $$Date:: 2017-04-24 #$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauvilsa@upv.es>
  * @license MIT License
  */
@@ -52,6 +52,8 @@ void PageXML::release() {
     pixDestroy(&pageimg);
 #elif defined (__PAGEXML_MAGICK__)
   pageimg = Magick::Image();
+#elif defined (__PAGEXML_CVIMG__)
+  pageimg = cv::Mat();
 #endif
   if( xml != NULL )
     xmlFreeDoc(xml);
@@ -95,9 +97,8 @@ PageXML::PageXML() {
  */
 PageXML::PageXML( const libconfig::Config& config ) {
   loadConf(config);
-  PageXML();
-  //if( pagens == NULL )
-  //  pagens = default_pagens;
+  if( pagens == NULL )
+    pagens = default_pagens;
 }
 
 /**
@@ -111,9 +112,8 @@ PageXML::PageXML( const char* cfgfile ) {
     config.readFile(cfgfile);
     loadConf(config);
   }
-  PageXML();
-  //if( pagens == NULL )
-  //  pagens = default_pagens;
+  if( pagens == NULL )
+    pagens = default_pagens;
 }
 
 #endif
@@ -193,7 +193,7 @@ void PageXML::loadConf( const libconfig::Config& config ) {
         extended_names = (bool)setting;
         break;
       default:
-        throw invalid_argument( string("PageXML: unexpected configuration property: ") + setting.getName() );
+        throw invalid_argument( string("PageXML.loadConf: unexpected configuration property: ") + setting.getName() );
     }
   }
 }
@@ -247,19 +247,22 @@ void PageXML::newXml( const char* creator, const char* image, const int imgW, co
   setupXml();
 
   if( imgW <= 0 || imgH <= 0 ) {
-#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__)
+#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__) || defined (__PAGEXML_CVIMG__)
     loadImage( NULL, false );
 #if defined (__PAGEXML_LEPT__)
     width = pixGetWidth(pageimg);
     height = pixGetHeight(pageimg);
-#else
+#elif defined (__PAGEXML_MAGICK__)
     width = pageimg.columns();
     height = pageimg.rows();
+#elif defined (__PAGEXML_CVIMG__)
+    width = pageimg.size().width;
+    height = pageimg.size().height;
 #endif
     setAttr( "//_:Page", "imageWidth", to_string(width).c_str() );
     setAttr( "//_:Page", "imageHeight", to_string(height).c_str() );
 #else
-    throw runtime_error( "PageXML: newXml: invalid image size" );
+    throw runtime_error( "PageXML.newXml: invalid image size" );
 #endif
   }
 }
@@ -276,7 +279,7 @@ void PageXML::loadXml( const char* fname ) {
     xmldir = strndup(fname,strrchr(fname,'/')-fname);
   FILE *file;
   if( (file=fopen(fname,"rb")) == NULL )
-    throw runtime_error( string("PageXML: loadXml: unable to open file: ") + fname );
+    throw runtime_error( string("PageXML.loadXml: unable to open file: ") + fname );
   loadXml( fileno(file) );
   fclose(file);
 }
@@ -300,21 +303,21 @@ void PageXML::loadXml( int fnum ) {
 void PageXML::setupXml() {
   context = xmlXPathNewContext(xml);
   if( context == NULL )
-    throw runtime_error( "PageXML: setupXml: unable create xpath context" );
+    throw runtime_error( "PageXML.setupXml: unable create xpath context" );
   if( xmlXPathRegisterNs( context, (xmlChar*)"_", (xmlChar*)pagens ) != 0 )
-    throw runtime_error( "PageXML: setupXml: unable to register namespace" );
+    throw runtime_error( "PageXML.setupXml: unable to register namespace" );
   rootnode = context->node;
   rpagens = xmlSearchNsByHref(xml,xmlDocGetRootElement(xml),(xmlChar*)pagens);
 
   vector<xmlNodePtr> elem_page = select( "//_:Page" );
   if( elem_page.size() == 0 )
-    throw runtime_error( "PageXML: setupXml: unable to find page element" );
+    throw runtime_error( "PageXML.setupXml: unable to find page element" );
 
   /// Get page size ///
   char* uwidth = (char*)xmlGetProp( elem_page[0], (xmlChar*)"imageWidth" );
   char* uheight = (char*)xmlGetProp( elem_page[0], (xmlChar*)"imageHeight" );
   if( uwidth == NULL || uheight == NULL )
-    throw runtime_error( "PageXML: setupXml: problems retrieving page size from xml" );
+    throw runtime_error( "PageXML.setupXml: problems retrieving page size from xml" );
   width = atoi(uwidth);
   height = atoi(uheight);
   free(uwidth);
@@ -323,11 +326,11 @@ void PageXML::setupXml() {
   /// Get image path ///
   imgpath = (char*)xmlGetProp( elem_page[0], (xmlChar*)"imageFilename" );
   if( imgpath ==NULL )
-    throw runtime_error( "PageXML: setupXml: problems retrieving image file from xml" );
+    throw runtime_error( "PageXML.setupXml: problems retrieving image file from xml" );
 
   char* p = strrchr(imgpath,'/') == NULL ? imgpath : strrchr(imgpath,'/')+1;
   if( strrchr(p,'.') == NULL )
-    throw runtime_error( string("PageXML: setupXml: expected image file name to have an extension: ")+p );
+    throw runtime_error( string("PageXML.setupXml: expected image file name to have an extension: ")+p );
   imgbase = strndup(p,strrchr(p,'.')-p);
   for( char *p=imgbase; *p!='\0'; p++ )
     if( *p == ' ' /*|| *p == '[' || *p == ']' || *p == '(' || *p == ')'*/ )
@@ -337,7 +340,7 @@ void PageXML::setupXml() {
     xmldir = strdup(".");
 }
 
-#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__)
+#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__) || defined (__PAGEXML_CVIMG__)
 
 /**
  * Loads an image for the Page XML.
@@ -352,14 +355,18 @@ void PageXML::loadImage( const char* fname, const bool check_size ) {
 #if defined (__PAGEXML_LEPT__)
   pageimg = pixRead(fname);
   if( pageimg == NULL )
-    throw runtime_error( "PageXML: loadImage: problems reading image" );
+    throw runtime_error( "PageXML.loadImage: problems reading image" );
 #elif defined (__PAGEXML_MAGICK__)
   try {
     pageimg.read(fname);
-  } 
-  catch( exception& e ) {
-    throw runtime_error( string("PageXML: loadImage: ") + e.what() );
   }
+  catch( exception& e ) {
+    throw runtime_error( string("PageXML.loadImage: ") + e.what() );
+  }
+#elif defined (__PAGEXML_CVIMG__)
+  pageimg = grayimg ? cv::imread(fname,CV_LOAD_IMAGE_GRAYSCALE) : cv::imread(fname);
+  if ( ! pageimg.data )
+    throw runtime_error( "PageXML.loadImage: problems reading image" );
 #endif
 
   if( grayimg ) {
@@ -381,8 +388,10 @@ void PageXML::loadImage( const char* fname, const bool check_size ) {
     if( (int)width != pixGetWidth(pageimg) || (int)height != pixGetHeight(pageimg) )
 #elif defined (__PAGEXML_MAGICK__)
     if( width != pageimg.columns() || height != pageimg.rows() )
+#elif defined (__PAGEXML_CVIMG__)
+    if( (int)width != pageimg.size().width || (int)height != pageimg.size().height )
 #endif
-      throw runtime_error( string("PageXML: loadImage: discrepancy between image and xml page size: ") + fname );
+      throw runtime_error( string("PageXML.loadImage: discrepancy between image and xml page size: ") + fname );
 }
 
 #endif
@@ -561,9 +570,9 @@ vector<xmlNodePtr> PageXML::select( const char* xpath, xmlNodePtr basenode ) {
 #ifndef __REUSE_CONTEXT__
     ncontext = xmlXPathNewContext(basenode->doc);
     if( ncontext == NULL )
-      throw runtime_error( "PageXML: select: unable create xpath context" );
+      throw runtime_error( "PageXML.select: unable create xpath context" );
     if( xmlXPathRegisterNs( ncontext, (xmlChar*)"_", (xmlChar*)pagens ) != 0 )
-      throw runtime_error( "PageXML: select: unable to register namespace" );
+      throw runtime_error( "PageXML.select: unable to register namespace" );
 #endif
     ncontext->node = basenode;
   }
@@ -578,7 +587,7 @@ vector<xmlNodePtr> PageXML::select( const char* xpath, xmlNodePtr basenode ) {
 #endif
 
   if( xsel == NULL )
-    throw runtime_error( string("PageXML: xpath expression failed: ") + xpath );
+    throw runtime_error( string("PageXML.select: xpath expression failed: ") + xpath );
   else {
     if( ! xmlXPathNodeSetIsEmpty(xsel->nodesetval) )
       for( int n=0; n<xsel->nodesetval->nodeNr; n++ )
@@ -611,7 +620,7 @@ bool PageXML::nodeIs( xmlNodePtr node, const char* name ) {
   return xmlStrcmp( node->name, (const xmlChar*)name ) ? false : true;
 }
 
-#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__)
+#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__) || defined (__PAGEXML_CVIMG__)
 
 /**
  * Crops images using its Coords polygon, regions outside the polygon are set to transparent.
@@ -630,6 +639,8 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
   if( pageimg == NULL )
 #elif defined (__PAGEXML_MAGICK__)
   if( pageimg.columns() == 0 )
+#elif defined (__PAGEXML_CVIMG__)
+  if( ! pageimg.data )
 #endif
     loadImage();
 
@@ -637,12 +648,12 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
     xmlNodePtr node = elems_coords[n];
 
     if( xmlStrcmp( node->name, (const xmlChar*)"Coords") )
-      throw runtime_error( string("PageXML: expected xpath to match only Coords elements: match=") + to_string(n+1) + " xpath=" + xpath );
+      throw runtime_error( string("PageXML.crop: expected xpath to match only Coords elements: match=") + to_string(n+1) + " xpath=" + xpath );
 
     /// Get parent node id ///
     string sampid;
     if( ! getAttr( node->parent, "id", sampid ) )
-      throw runtime_error( string("PageXML: expected parent element to include id attribute: match=") + to_string(n+1) + " xpath=" + xpath );
+      throw runtime_error( string("PageXML.crop: expected parent element to include id attribute: match=") + to_string(n+1) + " xpath=" + xpath );
 
     /// Construct sample name ///
     string sampname = string(".") + sampid;
@@ -663,7 +674,7 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
     /// Get coords points ///
     string spoints;
     if( ! getAttr( node, "points", spoints ) )
-      throw runtime_error( string("PageXML: expected a points attribute in Coords element: id=") + sampid );
+      throw runtime_error( string("PageXML.crop: expected a points attribute in Coords element: id=") + sampid );
     vector<cv::Point2f> coords;
     stringToPoints( spoints, coords );
 
@@ -683,6 +694,13 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
 #elif defined (__PAGEXML_MAGICK__)
     Magick::Image cropimg = pageimg;
     cropimg.crop( Magick::Geometry(cropW,cropH,cropX,cropY) );
+#elif defined (__PAGEXML_CVIMG__)
+    cv::Rect roi;
+    roi.x = cropX;
+    roi.y = cropY;
+    roi.width = cropW;
+    roi.height = cropH;
+    cv::Mat cropimg = pageimg(roi);
 #endif
 
 #if defined (__PAGEXML_MAGICK__)
@@ -697,12 +715,15 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
       list<Magick::Drawable> drawList;
       drawList.push_back( Magick::DrawableStrokeColor(opaque) );
       drawList.push_back( Magick::DrawableFillColor(opaque) );
+      drawList.push_back( Magick::DrawableFillRule(Magick::NonZeroRule) );
       drawList.push_back( Magick::DrawableStrokeAntialias(false) );
       drawList.push_back( Magick::DrawablePolygon(cvToMagick(coords)) );
       Magick::Image mask( Magick::Geometry(cropW,cropH), transparent );
       mask.draw(drawList);
       cropimg.draw( Magick::DrawableCompositeImage(0,0,0,0,mask,Magick::CopyOpacityCompositeOp) );
     }
+#elif defined (__PAGEXML_CVIMG__)
+  // @todo Add transparency layer for opencv
 #endif
 
     /// Append crop and related data to list ///
@@ -794,7 +815,7 @@ int PageXML::setAttr( vector<xmlNodePtr> nodes, const char* name, const char* va
       xmlSetProp( nodes[n], (xmlChar*)name, (xmlChar*)value ) :
       xmlNewProp( nodes[n], (xmlChar*)name, (xmlChar*)value ) ;
     if( ! attr )
-      throw runtime_error( string("PageXML: setAttr: problems setting attribute: name=") + name );
+      throw runtime_error( string("PageXML.setAttr: problems setting attribute: name=") + name );
   }
 
   return (int)nodes.size();
@@ -848,12 +869,12 @@ int PageXML::setAttr( const string xpath, const string name, const string value 
 xmlNodePtr PageXML::addElem( const char* name, const char* id, const xmlNodePtr node, PAGEXML_INSERT itype, bool checkid ) {
   xmlNodePtr elem = xmlNewNode( rpagens, (xmlChar*)name );
   if( ! elem )
-    throw runtime_error( string("PageXML: addElem: problems creating new element: name=") + name );
+    throw runtime_error( string("PageXML.addElem: problems creating new element: name=") + name );
   if( id != NULL ) {
     if( checkid ) {
       vector<xmlNodePtr> idsel = select( (string("//*[@id='")+id+"']").c_str() );
       if( idsel.size() > 0 )
-        throw runtime_error( string("PageXML: addElem: id already exists: id=") + id );
+        throw runtime_error( string("PageXML.addElem: id already exists: id=") + id );
     }
     xmlNewProp( elem, (xmlChar*)"id", (xmlChar*)id );
   }
@@ -885,7 +906,7 @@ xmlNodePtr PageXML::addElem( const char* name, const char* id, const xmlNodePtr 
 xmlNodePtr PageXML::addElem( const char* name, const char* id, const char* xpath, PAGEXML_INSERT itype, bool checkid ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addElem: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addElem: unmatched target: xpath=") + xpath );
 
   return addElem( name, id, target[0], itype, checkid );
 }
@@ -902,7 +923,7 @@ xmlNodePtr PageXML::addElem( const char* name, const char* id, const char* xpath
 xmlNodePtr PageXML::addElem( const string name, const string id, const string xpath, PAGEXML_INSERT itype, bool checkid ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addElem: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addElem: unmatched target: xpath=") + xpath );
 
   return addElem( name.c_str(), id.c_str(), target[0], itype, checkid );
 }
@@ -960,7 +981,7 @@ void PageXML::setRotation( const xmlNodePtr node, const float rotation ) {
       rmElems( select( "@readingOrientation", node ) );
   }
   else
-    throw runtime_error( "PageXML: setRotation: only possible for TextRegion" );
+    throw runtime_error( "PageXML.setRotation: only possible for TextRegion" );
 }
 
 /**
@@ -982,7 +1003,7 @@ void PageXML::setReadingDirection( const xmlNodePtr node, PAGEXML_READ_DIRECTION
       rmElems( select( "@readingDirection", node ) );
   }
   else
-    throw runtime_error( "PageXML: setReadingDirection: only possible for TextRegion" );
+    throw runtime_error( "PageXML.setReadingDirection: only possible for TextRegion" );
 }
 
 /**
@@ -1163,13 +1184,13 @@ void PageXML::setLastChange() {
 
   vector<xmlNodePtr> lastchange = select( "//_:LastChange" );
   if( lastchange.size() != 1 )
-    throw runtime_error( "PageXML: setLastChange: unable to select node" );
+    throw runtime_error( "PageXML.setLastChange: unable to select node" );
 
   rmElems( select( "text()", lastchange[0] ) );
 
   xmlNodePtr text = xmlNewText( (xmlChar*)tstamp );
   if( ! text || ! xmlAddChild(lastchange[0],text) )
-    throw runtime_error( "PageXML: setLastChange: problems updating time stamp" );
+    throw runtime_error( "PageXML.setLastChange: problems updating time stamp" );
 }
 
 /**
@@ -1187,13 +1208,13 @@ xmlNodePtr PageXML::setTextEquiv( xmlNodePtr node, const char* text, const doubl
 
   xmlNodePtr unicode = xmlNewTextChild( textequiv, NULL, (xmlChar*)"Unicode", (xmlChar*)text );
   if( ! unicode )
-    throw runtime_error( "PageXML: setTextEquiv: problems setting TextEquiv" );
+    throw runtime_error( "PageXML.setTextEquiv: problems setting TextEquiv" );
 
   if( _conf != NULL ) {
     char conf[64];
     snprintf( conf, sizeof conf, "%g", *_conf );
     if( ! xmlNewProp( textequiv, (xmlChar*)"conf", (xmlChar*)conf ) )
-      throw runtime_error( "PageXML: setTextEquiv: problems setting conf attribute" );
+      throw runtime_error( "PageXML.setTextEquiv: problems setting conf attribute" );
   }
 
   return textequiv;
@@ -1210,7 +1231,7 @@ xmlNodePtr PageXML::setTextEquiv( xmlNodePtr node, const char* text, const doubl
 xmlNodePtr PageXML::setTextEquiv( const char* xpath, const char* text, const double* conf ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: setTextEquiv: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.setTextEquiv: unmatched target: xpath=") + xpath );
 
   return setTextEquiv( target[0], text, conf );
 }
@@ -1233,7 +1254,7 @@ xmlNodePtr PageXML::setCoords( xmlNodePtr node, const vector<cv::Point2f>& point
     coords = addElem( "Coords", NULL, node );
 
   if( ! xmlNewProp( coords, (xmlChar*)"points", (xmlChar*)pointsToString(points).c_str() ) )
-    throw runtime_error( "PageXML: setCoords: problems setting points attribute" );
+    throw runtime_error( "PageXML.setCoords: problems setting points attribute" );
 
   return coords;
 }
@@ -1248,7 +1269,7 @@ xmlNodePtr PageXML::setCoords( xmlNodePtr node, const vector<cv::Point2f>& point
 xmlNodePtr PageXML::setCoords( const char* xpath, const vector<cv::Point2f>& points ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: setCoords: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.setCoords: unmatched target: xpath=") + xpath );
 
   return setCoords( target[0], points );
 }
@@ -1271,7 +1292,7 @@ xmlNodePtr PageXML::setBaseline( xmlNodePtr node, const vector<cv::Point2f>& poi
     baseline = addElem( "Baseline", NULL, node );
 
   if( ! xmlNewProp( baseline, (xmlChar*)"points", (xmlChar*)pointsToString(points).c_str() ) )
-    throw runtime_error( "PageXML: setBaseline: problems setting points attribute" );
+    throw runtime_error( "PageXML.setBaseline: problems setting points attribute" );
 
   return baseline;
 }
@@ -1286,7 +1307,7 @@ xmlNodePtr PageXML::setBaseline( xmlNodePtr node, const vector<cv::Point2f>& poi
 xmlNodePtr PageXML::setBaseline( const char* xpath, const vector<cv::Point2f>& points ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: setBaseline: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.setBaseline: unmatched target: xpath=") + xpath );
 
   return setBaseline( target[0], points );
 }
@@ -1308,7 +1329,7 @@ xmlNodePtr PageXML::addGlyph( xmlNodePtr node, const char* id, const char* befor
   else {
     string wid;
     if( ! getAttr( node, "id", wid ) )
-      throw runtime_error( "PageXML: addGlyph: expected element to have an id attribute" );
+      throw runtime_error( "PageXML.addGlyph: expected element to have an id attribute" );
     int n = select( "_:Glyph", node ).size();
     while( true ) {
       if( select( string("*[@id='")+wid+"_g"+to_string(++n)+"']", node ).size() == 0 ) {
@@ -1316,14 +1337,14 @@ xmlNodePtr PageXML::addGlyph( xmlNodePtr node, const char* id, const char* befor
         break;
       }
       if( n > 100000 )
-        throw runtime_error( "PageXML: addGlyph: apparently in infinite loop" );
+        throw runtime_error( "PageXML.addGlyph: apparently in infinite loop" );
     }
   }
 
   if( before_id != NULL ) {
     vector<xmlNodePtr> sel = select( string("*[@id='")+before_id+"']", node );
     if( sel.size() == 0 )
-      throw runtime_error( string("PageXML: addGlyph: unable to find id=")+before_id );
+      throw runtime_error( string("PageXML.addGlyph: unable to find id=")+before_id );
     glyph = addElem( "Glyph", gid.c_str(), sel[0], PAGEXML_INSERT_PREVSIB, true );
   }
   else
@@ -1343,7 +1364,7 @@ xmlNodePtr PageXML::addGlyph( xmlNodePtr node, const char* id, const char* befor
 xmlNodePtr PageXML::addGlyph( const char* xpath, const char* id, const char* before_id ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addGlyph: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addGlyph: unmatched target: xpath=") + xpath );
 
   return addGlyph( target[0], id, before_id );
 }
@@ -1365,7 +1386,7 @@ xmlNodePtr PageXML::addWord( xmlNodePtr node, const char* id, const char* before
   else {
     string lid;
     if( ! getAttr( node, "id", lid ) )
-      throw runtime_error( "PageXML: addWord: expected element to have an id attribute" );
+      throw runtime_error( "PageXML.addWord: expected element to have an id attribute" );
     int n = select( "_:Word", node ).size();
     while( true ) {
       if( select( string("*[@id='")+lid+"_w"+to_string(++n)+"']", node ).size() == 0 ) {
@@ -1373,14 +1394,14 @@ xmlNodePtr PageXML::addWord( xmlNodePtr node, const char* id, const char* before
         break;
       }
       if( n > 100000 )
-        throw runtime_error( "PageXML: addWord: apparently in infinite loop" );
+        throw runtime_error( "PageXML.addWord: apparently in infinite loop" );
     }
   }
 
   if( before_id != NULL ) {
     vector<xmlNodePtr> sel = select( string("*[@id='")+before_id+"']", node );
     if( sel.size() == 0 )
-      throw runtime_error( string("PageXML: addWord: unable to find id=")+before_id );
+      throw runtime_error( string("PageXML.addWord: unable to find id=")+before_id );
     word = addElem( "Word", wid.c_str(), sel[0], PAGEXML_INSERT_PREVSIB, true );
   }
   else
@@ -1400,7 +1421,7 @@ xmlNodePtr PageXML::addWord( xmlNodePtr node, const char* id, const char* before
 xmlNodePtr PageXML::addWord( const char* xpath, const char* id, const char* before_id ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addWord: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addWord: unmatched target: xpath=") + xpath );
 
   return addWord( target[0], id, before_id );
 }
@@ -1422,7 +1443,7 @@ xmlNodePtr PageXML::addTextLine( xmlNodePtr node, const char* id, const char* be
   else {
     string rid;
     if( ! getAttr( node, "id", rid ) )
-      throw runtime_error( "PageXML: addTextLine: expected element to have an id attribute" );
+      throw runtime_error( "PageXML.addTextLine: expected element to have an id attribute" );
     int n = select( "_:TextLine", node ).size();
     while( true ) {
       if( select( string("*[@id='")+rid+"_l"+to_string(++n)+"']", node ).size() == 0 ) {
@@ -1430,14 +1451,14 @@ xmlNodePtr PageXML::addTextLine( xmlNodePtr node, const char* id, const char* be
         break;
       }
       if( n > 100000 )
-        throw runtime_error( "PageXML: addTextLine: apparently in infinite loop" );
+        throw runtime_error( "PageXML.addTextLine: apparently in infinite loop" );
     }
   }
 
   if( before_id != NULL ) {
     vector<xmlNodePtr> sel = select( string("*[@id='")+before_id+"']", node );
     if( sel.size() == 0 )
-      throw runtime_error( string("PageXML: addTextLine: unable to find id=")+before_id );
+      throw runtime_error( string("PageXML.addTextLine: unable to find id=")+before_id );
     textline = addElem( "TextLine", lid.c_str(), sel[0], PAGEXML_INSERT_PREVSIB, true );
   }
   else
@@ -1457,7 +1478,7 @@ xmlNodePtr PageXML::addTextLine( xmlNodePtr node, const char* id, const char* be
 xmlNodePtr PageXML::addTextLine( const char* xpath, const char* id, const char* before_id ) {
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addTextLine: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addTextLine: unmatched target: xpath=") + xpath );
 
   return addTextLine( target[0], id, before_id );
 }
@@ -1484,14 +1505,14 @@ xmlNodePtr PageXML::addTextRegion( xmlNodePtr node, const char* id, const char* 
         break;
       }
       if( n > 100000 )
-        throw runtime_error( "PageXML: addTextRegion: apparently in infinite loop" );
+        throw runtime_error( "PageXML.addTextRegion: apparently in infinite loop" );
     }
   }
 
   if( before_id != NULL ) {
     vector<xmlNodePtr> sel = select( string("*[@id='")+before_id+"']", node );
     if( sel.size() == 0 )
-      throw runtime_error( string("PageXML: addTextRegion: unable to find id=")+before_id );
+      throw runtime_error( string("PageXML.addTextRegion: unable to find id=")+before_id );
     textreg = addElem( "TextRegion", rid.c_str(), sel[0], PAGEXML_INSERT_PREVSIB, true );
   }
   else
@@ -1503,15 +1524,15 @@ xmlNodePtr PageXML::addTextRegion( xmlNodePtr node, const char* id, const char* 
 /**
  * Adds a TextRegion to a given xpath.
  *
- * @param xpath      Selector for element to set the TextRegion.
  * @param id         ID for TextRegion, if NULL it is selected automatically.
  * @param before_id  If !=NULL inserts it before the TextRegion with this ID.
  * @return           Pointer to created element.
  */
-xmlNodePtr PageXML::addTextRegion( const char* xpath, const char* id, const char* before_id ) {
+xmlNodePtr PageXML::addTextRegion( const char* id, const char* before_id ) {
+  char xpath[] = "//_:Page";
   vector<xmlNodePtr> target = select( xpath );
   if( target.size() == 0 )
-    throw runtime_error( string("PageXML: addTextRegion: unmatched target: xpath=") + xpath );
+    throw runtime_error( string("PageXML.addTextRegion: unmatched target: xpath=") + xpath );
 
   return addTextRegion( target[0], id, before_id );
 }
@@ -1528,7 +1549,7 @@ bool PageXML::uniqueIDs() {
   for( int n=(int)nodes.size()-1; n>=0; n-- ) {
     getAttr( nodes[n], "id", id );
     if( seen.find(id) != seen.end() && seen[id] ) {
-      fprintf( stderr, "PageXML: uniqueIDs: duplicate id: %s\n", id.c_str() );
+      fprintf( stderr, "PageXML.uniqueIDs: duplicate id: %s\n", id.c_str() );
       seen[id] = unique = false;
     }
     else

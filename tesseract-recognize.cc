@@ -1,9 +1,9 @@
 /**
- * Tool that does layout anaysis and/or text recognition using tesseract using Page XML format
+ * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
  * @version $Version: 2017.04.24$
- * @author Mauricio Villegas <mauvilsa@upv.es>
- * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauvilsa@upv.es>
+ * @author Mauricio Villegas <mauricio_ville@yahoo.com>
+ * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
  * @license MIT License
  */
@@ -13,7 +13,7 @@
 #include <string>
 #include <regex>
 #include <getopt.h>
-#include <time.h>
+#include <unistd.h>
 
 #include <../leptonica/allheaders.h>
 #include <../tesseract/baseapi.h>
@@ -93,7 +93,7 @@ static struct option gb_long_options[] = {
 #define strbool( cond ) ( ( cond ) ? "true" : "false" )
 
 void print_usage() {
-  fprintf( stderr, "Description: Layout analysis and OCR using tesseract in Page XML format\n" );
+  fprintf( stderr, "Description: Layout analysis and OCR using tesseract providing results in Page XML format\n" );
   fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE|PAGEXML) [OUTPUT]\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " --lang LANG             Language used for OCR (def.=%s)\n", gb_lang );
@@ -383,7 +383,7 @@ int main( int argc, char *argv[] ) {
 
         /// Otherwise add block as TextRegion element ///
         else if ( node_level < LEVEL_REGION ) {
-          xreg = page.addTextRegion( "//_:Page", rid.c_str() );
+          xreg = page.addTextRegion( rid.c_str() );
 
           /// Set block bounding box and text ///
           setCoords( iter, tesseract::RIL_BLOCK, page, xreg, images[n].x, images[n].y );

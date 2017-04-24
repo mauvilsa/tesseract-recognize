@@ -1,7 +1,7 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Revision:: 243   $$Date:: 2017-04-13 #$
+ * @version $Revision:: 245   $$Date:: 2017-04-24 #$
  * @copyright Copyright (c) 2016 to the present, Mauricio Villegas <mauvilsa@upv.es>
  * @license MIT License
  */
@@ -56,6 +56,8 @@ struct NamedImage {
   Pix *image = NULL;
 #elif defined (__PAGEXML_MAGICK__)
   Magick::Image image;
+#elif defined (__PAGEXML_CVIMG__)
+  cv::Mat image;
 #endif
   xmlNodePtr node = NULL;
 
@@ -70,6 +72,8 @@ struct NamedImage {
               Pix *_image,
 #elif defined (__PAGEXML_MAGICK__)
               Magick::Image _image,
+#elif defined (__PAGEXML_CVIMG__)
+              cv::Mat _image,
 #endif
               xmlNodePtr _node
             ) {
@@ -98,7 +102,7 @@ class PageXML {
     void newXml( const char* creator, const char* image, const int imgW = 0, const int imgH = 0 );
     void loadXml( const char* fname );
     void loadXml( int fnum );
-#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__)
+#if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__) || defined (__PAGEXML_CVIMG__)
     void loadImage( const char* fname = NULL, const bool check_size = true );
 #endif
     int simplifyIDs();
@@ -149,7 +153,7 @@ class PageXML {
     xmlNodePtr addTextLine( xmlNodePtr node, const char* id = NULL, const char* before_id = NULL );
     xmlNodePtr addTextLine( const char* xpath, const char* id = NULL, const char* before_id = NULL );
     xmlNodePtr addTextRegion( xmlNodePtr node, const char* id = NULL, const char* before_id = NULL );
-    xmlNodePtr addTextRegion( const char* xpath = "//_:Page", const char* id = NULL, const char* before_id = NULL );
+    xmlNodePtr addTextRegion( const char* id = NULL, const char* before_id = NULL );
     char* getBase();
     int write( const char* fname = "-" );
   private:
@@ -168,6 +172,8 @@ class PageXML {
     Pix *pageimg = NULL;
 #elif defined (__PAGEXML_MAGICK__)
     Magick::Image pageimg;
+#elif defined (__PAGEXML_CVIMG__)
+    cv::Mat pageimg;
 #endif
     unsigned int width;
     unsigned int height;
