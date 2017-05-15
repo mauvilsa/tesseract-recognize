@@ -35,7 +35,7 @@ bool gb_textlevels[] = { false, false, false, false };
 bool gb_textatlayout = true;
 char *gb_xpath = gb_default_xpath;
 
-bool gb_save_crops = true;
+bool gb_save_crops = false;
 
 enum {
   LEVEL_REGION = 0,
