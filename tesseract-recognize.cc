@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.04.24$
+ * @version $Version: 2017.05.15$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "$Version: 2017.04.24$";
+static char version[] = "$Version: 2017.05.15$";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -34,6 +34,8 @@ bool gb_onlylayout = false;
 bool gb_textlevels[] = { false, false, false, false };
 bool gb_textatlayout = true;
 char *gb_xpath = gb_default_xpath;
+
+bool gb_save_crops = true;
 
 enum {
   LEVEL_REGION = 0,
@@ -67,6 +69,7 @@ enum {
   OPTION_LAYOUTLEVEL      ,
   OPTION_TEXTLEVELS       ,
   OPTION_ONLYLAYOUT       ,
+  OPTION_SAVECROPS        ,
   OPTION_XPATH            ,
   OPTION_PSM              ,
   OPTION_OEM
@@ -84,6 +87,7 @@ static struct option gb_long_options[] = {
     { "layout-level", required_argument, NULL, OPTION_LAYOUTLEVEL },
     { "text-levels",  required_argument, NULL, OPTION_TEXTLEVELS },
     { "only-layout",  no_argument,       NULL, OPTION_ONLYLAYOUT },
+    { "save-crops",   no_argument,       NULL, OPTION_SAVECROPS },
     { "xpath",        required_argument, NULL, OPTION_XPATH },
     { 0, 0, 0, 0 }
   };
@@ -104,6 +108,7 @@ void print_usage() {
   fprintf( stderr, " --layout-level LEVEL    Layout output level: region, line, word, glyph (def.=%s)\n", levelStrings[gb_layoutlevel] );
   fprintf( stderr, " --text-levels L1[,L2]+  Text output level(s): region, line, word, glyph (def.=layout-level)\n" );
   fprintf( stderr, " --only-layout           Only perform layout analysis, no OCR (def.=%s)\n", strbool(gb_onlylayout) );
+  fprintf( stderr, " --save-crops            Saves cropped images (def.=%s)\n", strbool(gb_save_crops) );
   fprintf( stderr, " --xpath XPATH           xpath for selecting elements to process (def.=%s)\n", gb_xpath );
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
@@ -204,6 +209,9 @@ int main( int argc, char *argv[] ) {
       case OPTION_ONLYLAYOUT:
         gb_onlylayout = true;
         break;
+      case OPTION_SAVECROPS:
+        gb_save_crops = true;
+        break;
       case OPTION_XPATH:
         gb_xpath = optarg;
         break;
@@ -293,6 +301,11 @@ int main( int argc, char *argv[] ) {
   /// Loop through all images to process ///
   for ( n=0; n<(int)images.size(); n++ ) {
     tessApi->SetImage( images[n].image );
+    if ( gb_save_crops && input_xml ) {
+      std::string fout = std::string("crop_")+std::to_string(n)+"_"+images[n].id+".png";
+      fprintf( stderr, "%s: writing cropped image: %s\n", tool, fout.c_str() );
+      pixWriteImpliedFormat( fout.c_str(), images[n].image, 0, 0 );
+    }
 
     /// For xml input setup node level ///
     xmlNodePtr node = NULL;
