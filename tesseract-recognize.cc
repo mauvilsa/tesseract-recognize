@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.05.15$
+ * @version $Version: 2017.05.23$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "$Version: 2017.05.15$";
+static char version[] = "$Version: 2017.05.23$";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -34,6 +34,7 @@ bool gb_onlylayout = false;
 bool gb_textlevels[] = { false, false, false, false };
 bool gb_textatlayout = true;
 char *gb_xpath = gb_default_xpath;
+char *gb_image = NULL;
 
 bool gb_save_crops = false;
 
@@ -71,6 +72,7 @@ enum {
   OPTION_ONLYLAYOUT       ,
   OPTION_SAVECROPS        ,
   OPTION_XPATH            ,
+  OPTION_IMAGE            ,
   OPTION_PSM              ,
   OPTION_OEM
 };
@@ -89,6 +91,7 @@ static struct option gb_long_options[] = {
     { "only-layout",  no_argument,       NULL, OPTION_ONLYLAYOUT },
     { "save-crops",   no_argument,       NULL, OPTION_SAVECROPS },
     { "xpath",        required_argument, NULL, OPTION_XPATH },
+    { "image",        required_argument, NULL, OPTION_IMAGE },
     { 0, 0, 0, 0 }
   };
 
@@ -110,6 +113,7 @@ void print_usage() {
   fprintf( stderr, " --only-layout           Only perform layout analysis, no OCR (def.=%s)\n", strbool(gb_onlylayout) );
   fprintf( stderr, " --save-crops            Saves cropped images (def.=%s)\n", strbool(gb_save_crops) );
   fprintf( stderr, " --xpath XPATH           xpath for selecting elements to process (def.=%s)\n", gb_xpath );
+  fprintf( stderr, " --image IMAGE           Use given image instead of one in Page XML\n" );
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
   fprintf( stderr, "\n" );
@@ -215,6 +219,9 @@ int main( int argc, char *argv[] ) {
       case OPTION_XPATH:
         gb_xpath = optarg;
         break;
+      case OPTION_IMAGE:
+        gb_image = optarg;
+        break;
       case OPTION_HELP:
         print_usage();
         return 0;
@@ -275,6 +282,8 @@ int main( int argc, char *argv[] ) {
       fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
       return 1;
     }
+    if ( gb_image != NULL )
+      page.loadImage( gb_image );
     images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str() );
   }
 
