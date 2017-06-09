@@ -24,11 +24,8 @@ fi
 
 
 ### Update versions on files ###
-FILES=( $(git status --porcelain | sed 's| .* | |' | grep '^[MR]') );
+FILES=( $(git status --porcelain | sed 's| .* | |' | grep '^[MRA]') );
 V=$(date -u +%Y.%m.%d);
-
-NEWVER="no";
-N="${#FILES[@]}";
 
 check_change_after_staged () {
   [ "${2:1:1}" = "M" ] &&
@@ -36,26 +33,21 @@ check_change_after_staged () {
     exit 1;
 }
 
+update_file_version () {
+  echo "${0##*/}: updating version of $1" 1>&2;
+  sed -r -i 's|([$"])Version:[^$"]*([$"])|\1Version: '"$V"'\2|' "$1";
+  git add "$1";
+}
+
 n=1;
 while [ "$n" -lt "${#FILES[@]}" ]; do
   case "${FILES[$n]}" in
     tesseract-recognize.cc )
-      NEWVER="yes";
-      N="$n";
-      ;;
-    *.cc | *.h )
-      NEWVER="yes";
+      check_change_after_staged "${FILES[$n]}" "${FILES[$((n+1))]}";
+      update_file_version "${FILES[$n]}";
       ;;
   esac
   n=$((n+2));
 done
-
-if [ "$NEWVER" = "yes" ]; then
-  FILES[$N]="tesseract-recognize.cc";
-  check_change_after_staged "${FILES[$N]}" "${FILES[$((N+1))]}";
-  echo "${0##*/}: updating version of ${FILES[$N]}" 1>&2;
-  sed -i 's|$Version:[^$]*\$|$Version: '"$V"'$|' "${FILES[$N]}";
-  git add "${FILES[$N]}";
-fi
 
 exit 0;

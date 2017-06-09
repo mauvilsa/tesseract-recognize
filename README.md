@@ -25,4 +25,4 @@ If you intend to contribute, before any commits be sure to first execute githook
 
 The MIT License (MIT)
 
-Copyright (c) 2015-present, Mauricio Villegas <mauvilsa@upv.es>
+Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>

@@ -1,8 +1,8 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Revision:: 245   $$Date:: 2017-04-24 #$
- * @copyright Copyright (c) 2016 to the present, Mauricio Villegas <mauvilsa@upv.es>
+ * @version $Version: 2017.06.09$
+ * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
 
@@ -91,6 +91,7 @@ struct NamedImage {
 class PageXML {
   public:
     static const char* settingNames[];
+    static char* version();
     ~PageXML();
     PageXML();
 #if defined (__PAGEXML_LIBCONFIG__)
@@ -101,7 +102,7 @@ class PageXML {
     void printConf( FILE* file );
     void newXml( const char* creator, const char* image, const int imgW = 0, const int imgH = 0 );
     void loadXml( const char* fname );
-    void loadXml( int fnum );
+    void loadXml( int fnum, bool prevfree = true );
 #if defined (__PAGEXML_LEPT__) || defined (__PAGEXML_MAGICK__) || defined (__PAGEXML_CVIMG__)
     void loadImage( const char* fname = NULL, const bool check_size = true );
 #endif

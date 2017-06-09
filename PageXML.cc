@@ -1,8 +1,8 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Revision:: 245   $$Date:: 2017-04-24 #$
- * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauvilsa@upv.es>
+ * @version $Version: 2017.06.09$
+ * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
 
@@ -36,6 +36,18 @@ regex reXheight(".*x-height: *([0-9.]+) *px;.*");
 regex reRotation(".*readingOrientation: *([0-9.]+) *;.*");
 regex reDirection(".*readingDirection: *([lrt]t[rlb]) *;.*");
 
+/////////////////////
+/// Class version ///
+/////////////////////
+
+static char class_version[] = "Version: 2017.06.09";
+
+/**
+ * Returns the class version.
+ */
+char* PageXML::version() {
+  return class_version+9;
+}
 
 /////////////////////////
 /// Resources release ///
@@ -234,7 +246,7 @@ void PageXML::newXml( const char* creator, const char* image, const int imgW, co
   strftime(tstamp, sizeof tstamp, "%FT%TZ", gmtime(&now));
 
   string str = string("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
-      + "<PcGts xmlns=\"" + pagens + "\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\n"
+      + "<PcGts xmlns=\"" + pagens + "\">\n"
       + "  <Metadata>\n"
       + "    <Creator>" + (creator == NULL ? "PageXML.cc" : creator) + "</Creator>\n"
       + "    <Created>" + tstamp + "</Created>\n"
@@ -274,8 +286,10 @@ void PageXML::newXml( const char* creator, const char* image, const int imgW, co
  * @param fname  File name of the XML file to read.
  */
 void PageXML::loadXml( const char* fname ) {
+  release();
+
   if ( ! strcmp(fname,"-") ) {
-    loadXml( STDIN_FILENO );
+    loadXml( STDIN_FILENO, false );
     return;
   }
 
@@ -284,7 +298,7 @@ void PageXML::loadXml( const char* fname ) {
   FILE *file;
   if ( (file=fopen(fname,"rb")) == NULL )
     throw runtime_error( string("PageXML.loadXml: unable to open file: ") + fname );
-  loadXml( fileno(file) );
+  loadXml( fileno(file), false );
   fclose(file);
 }
 
@@ -293,8 +307,9 @@ void PageXML::loadXml( const char* fname ) {
  *
  * @param fnum  File number from where to read the XML file.
  */
-void PageXML::loadXml( int fnum ) {
-  release();
+void PageXML::loadXml( int fnum, bool prevfree ) {
+  if ( prevfree )
+    release();
 
   xmlKeepBlanksDefault(0);
   xml = xmlReadFd( fnum, NULL, NULL, XML_PARSE_NONET );
@@ -359,18 +374,18 @@ void PageXML::loadImage( const char* fname, const bool check_size ) {
 #if defined (__PAGEXML_LEPT__)
   pageimg = pixRead(fname);
   if( pageimg == NULL )
-    throw runtime_error( "PageXML.loadImage: problems reading image" );
+    throw runtime_error( string("PageXML.loadImage: problems reading image: ") + fname );
 #elif defined (__PAGEXML_MAGICK__)
   try {
     pageimg.read(fname);
   }
   catch( exception& e ) {
-    throw runtime_error( string("PageXML.loadImage: ") + e.what() );
+    throw runtime_error( string("PageXML.loadImage: problems reading image: ") + e.what() );
   }
 #elif defined (__PAGEXML_CVIMG__)
   pageimg = grayimg ? cv::imread(fname,CV_LOAD_IMAGE_GRAYSCALE) : cv::imread(fname);
   if ( ! pageimg.data )
-    throw runtime_error( "PageXML.loadImage: problems reading image" );
+    throw runtime_error( string("PageXML.loadImage: problems reading image: ") + fname );
 #endif
 
   if( grayimg ) {
@@ -707,8 +722,8 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
     cv::Mat cropimg = pageimg(roi);
 #endif
 
-#if defined (__PAGEXML_MAGICK__)
     if( ! isBBox( coords ) ) {
+#if defined (__PAGEXML_MAGICK__)
       /// Subtract crop window offset ///
       for( auto&& coord : coords ) {
         coord.x -= cropX;
@@ -725,13 +740,25 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
       Magick::Image mask( Magick::Geometry(cropW,cropH), transparent );
       mask.draw(drawList);
       cropimg.draw( Magick::DrawableCompositeImage(0,0,0,0,mask,Magick::CopyOpacityCompositeOp) );
-    }
+
 #elif defined (__PAGEXML_CVIMG__)
-  // @todo Add transparency layer for opencv
+      /// Subtract crop window offset and round points ///
+      std::vector<cv::Point> rcoods;
+      std::vector<std::vector<cv::Point> > polys;
+      for( auto&& coord : coords )
+        rcoods.push_back( cv::Point( round(coord.x-cropX), round(coord.y-cropY) ) );
+      polys.push_back(rcoods);
+
+      /// Add alpha channel to image ///
+      cv::Mat wmask( cropimg.size(), CV_MAKE_TYPE(cropimg.type(),cropimg.channels()+1), cv::Scalar(0,0,0,0) );
+      cv::fillPoly( wmask, polys, cv::Scalar(0,0,0,255) );
+      int from_to[] = { 0,0, 1,1, 2,2 };
+      cv::mixChannels( &cropimg, 1, &wmask, 1, from_to, cropimg.channels() );
+      cropimg = wmask;
 #endif
+    }
 
     /// Append crop and related data to list ///
-    //NamedImage namedimage = {
     NamedImage namedimage(
       sampid,
       sampname,
@@ -741,7 +768,6 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
       cropY,
       cropimg,
       node );
-    //  node };
 
     images.push_back(namedimage);
   }

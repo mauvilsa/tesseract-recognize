@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.05.23$
+ * @version $Version: 2017.06.09$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "$Version: 2017.05.23$";
+static char version[] = "Version: 2017.06.09";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -35,6 +35,7 @@ bool gb_textlevels[] = { false, false, false, false };
 bool gb_textatlayout = true;
 char *gb_xpath = gb_default_xpath;
 char *gb_image = NULL;
+bool gb_inplace = false;
 
 bool gb_save_crops = false;
 
@@ -74,7 +75,8 @@ enum {
   OPTION_XPATH            ,
   OPTION_IMAGE            ,
   OPTION_PSM              ,
-  OPTION_OEM
+  OPTION_OEM              ,
+  OPTION_INPLACE
 };
 
 static char gb_short_options[] = "hv";
@@ -92,6 +94,7 @@ static struct option gb_long_options[] = {
     { "save-crops",   no_argument,       NULL, OPTION_SAVECROPS },
     { "xpath",        required_argument, NULL, OPTION_XPATH },
     { "image",        required_argument, NULL, OPTION_IMAGE },
+    { "inplace",      no_argument,       NULL, OPTION_INPLACE },
     { 0, 0, 0, 0 }
   };
 
@@ -114,6 +117,7 @@ void print_usage() {
   fprintf( stderr, " --save-crops            Saves cropped images (def.=%s)\n", strbool(gb_save_crops) );
   fprintf( stderr, " --xpath XPATH           xpath for selecting elements to process (def.=%s)\n", gb_xpath );
   fprintf( stderr, " --image IMAGE           Use given image instead of one in Page XML\n" );
+  fprintf( stderr, " --inplace               Overwrite input XML with result (def.=%s)\n", strbool(gb_inplace) );
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
   fprintf( stderr, "\n" );
@@ -222,11 +226,15 @@ int main( int argc, char *argv[] ) {
       case OPTION_IMAGE:
         gb_image = optarg;
         break;
+      case OPTION_INPLACE:
+        gb_inplace = true;
+        break;
       case OPTION_HELP:
         print_usage();
         return 0;
       case OPTION_VERSION:
-        fprintf( stderr, "%s %.10s\n", tool, version+10 );
+        fprintf( stderr, "%s %s\n", tool, version+9 );
+        fprintf( stderr, "compiled against PageXML %s\n", PageXML::version() );
 #ifdef TESSERACT_VERSION_STR
         fprintf( stderr, "compiled against tesseract %s, linked with %s\n", TESSERACT_VERSION_STR, tesseract::TessBaseAPI::Version() );
 #else
@@ -273,6 +281,12 @@ int main( int argc, char *argv[] ) {
   std::regex reXml(".+\\.xml$|^-$",std::regex_constants::icase);
   std::cmatch base_match;
   bool input_xml = std::regex_match(input_file,base_match,reXml);
+
+  /// Inplace only when one non-option argument and XML input ///
+  if ( gb_inplace && ( optind < argc || ! input_xml ) ) {
+    fprintf( stderr, "%s: warning: ignoring --inplace option\n", tool );
+    gb_inplace = false;
+  }
 
   /// Input is xml ///
   if ( input_xml ) {
@@ -521,7 +535,7 @@ int main( int argc, char *argv[] ) {
 
   /// Write resulting XML ///
   page.setLastChange();
-  page.write( optind < argc ? argv[optind] : "-" );
+  page.write( gb_inplace ? input_file : optind < argc ? argv[optind] : "-" );
 
   /// Release resources ///
   for ( n=0; n<(int)images.size(); n++ )
