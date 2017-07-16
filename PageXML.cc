@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Version: 2017.06.09$
+ * @version $Version: 2017.07.12$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -16,6 +16,8 @@
 
 #include <opencv2/opencv.hpp>
 #include <libxml/xpathInternals.h>
+//#include <libxslt/xslt.h>
+//#include <libxslt/xsltconfig.h>
 
 using namespace std;
 
@@ -40,7 +42,7 @@ regex reDirection(".*readingDirection: *([lrt]t[rlb]) *;.*");
 /// Class version ///
 /////////////////////
 
-static char class_version[] = "Version: 2017.06.09";
+static char class_version[] = "Version: 2017.07.12";
 
 /**
  * Returns the class version.
@@ -48,6 +50,14 @@ static char class_version[] = "Version: 2017.06.09";
 char* PageXML::version() {
   return class_version+9;
 }
+
+void PageXML::printVersions( FILE* file ) {
+  fprintf( file, "compiled against PageXML %s\n", class_version+9 );
+  fprintf( file, "compiled against libxml2 %s, linked with %s\n", LIBXML_DOTTED_VERSION, xmlParserVersion );
+  //fprintf( file, "compiled against libxslt %s, linked with %s\n", LIBXSLT_DOTTED_VERSION, xsltEngineVersion );
+  fprintf( file, "compiled against opencv %s\n", CV_VERSION );
+}
+
 
 /////////////////////////
 /// Resources release ///
@@ -445,7 +455,7 @@ list<Magick::Coordinate> cvToMagick( const vector<cv::Point2f>& points ) {
  * @param points   Array of (x,y) coordinates.
  */
 void PageXML::stringToPoints( const char* spoints, vector<cv::Point2f>& points ) {
-  points.empty();
+  points.clear();
 
   int n = 0;
   char *p = (char*)spoints-1;
@@ -504,7 +514,7 @@ void PageXML::pointsLimits( vector<cv::Point2f>& points, double& xmin, double& x
  * @param bbox       The 4 points defining the bounding box.
  */
 void PageXML::pointsBBox( vector<cv::Point2f>& points, vector<cv::Point2f>& bbox ) {
-  bbox.empty();
+  bbox.clear();
   if( points.size() == 0 )
     return;
 
@@ -644,10 +654,13 @@ bool PageXML::nodeIs( xmlNodePtr node, const char* name ) {
 /**
  * Crops images using its Coords polygon, regions outside the polygon are set to transparent.
  *
- * @param xpath  Selector for polygons to crop.
- * @return       An std::vector containing (id,name,image) triplets of the cropped images.
+ * @param xpath          Selector for polygons to crop.
+ * @param margin         Margins, if >1.0 pixels, otherwise percentage of maximum of crop width and height.
+ * @param opaque_coords  Whether to include an alpha channel with the polygon interior in opaque.
+ * @param transp_xpath   Selector for semi-transparent elements.
+ * @return               An std::vector containing NamedImage objects of the cropped images.
  */
-vector<NamedImage> PageXML::crop( const char* xpath ) {
+vector<NamedImage> PageXML::crop( const char* xpath, cv::Point2f* margin, bool opaque_coords, const char* transp_xpath ) {
   vector<NamedImage> images;
 
   vector<xmlNodePtr> elems_coords = select( xpath );
@@ -705,6 +718,23 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
     int cropX = (int)floor(xmin);
     int cropY = (int)floor(ymin);
 
+    /// Add margin to bounding box ///
+    if( margin != NULL ) {
+      int maxWH = cropW > cropH ? cropW : cropH;
+      int ocropX = cropX;
+      int ocropY = cropY;
+      cropX -= margin[0].x < 1.0 ? maxWH*margin[0].x : margin[0].x;
+      cropY -= margin[0].y < 1.0 ? maxWH*margin[0].y : margin[0].y;
+      cropX = cropX < 0 ? 0 : cropX;
+      cropY = cropY < 0 ? 0 : cropY;
+      cropW += ocropX - cropX;
+      cropH += ocropY - cropY;
+      cropW += margin[1].x < 1.0 ? maxWH*margin[1].x : margin[1].x;
+      cropH += margin[1].y < 1.0 ? maxWH*margin[1].y : margin[1].y;
+      cropW = cropX+cropW-1 >= width ? width-cropX-1 : cropW;
+      cropH = cropY+cropH-1 >= height ? height-cropY-1 : cropH;
+    }
+
     /// Crop image ///
 #if defined (__PAGEXML_LEPT__)
     BOX* box = boxCreate(cropX, cropY, cropW, cropH);
@@ -722,8 +752,13 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
     cv::Mat cropimg = pageimg(roi);
 #endif
 
-    if( ! isBBox( coords ) ) {
-#if defined (__PAGEXML_MAGICK__)
+    if( opaque_coords /*&& ! isBBox( coords )*/ ) {
+#if defined (__PAGEXML_LEPT__)
+      if( transp_xpath != NULL )
+        throw runtime_error( "PageXML.crop: transp_xpath not implemented for __PAGEXML_LEPT__" );
+      throw runtime_error( "PageXML.crop: opaque_coords not implemented for __PAGEXML_LEPT__" );
+
+#elif defined (__PAGEXML_MAGICK__)
       /// Subtract crop window offset ///
       for( auto&& coord : coords ) {
         coord.x -= cropX;
@@ -741,6 +776,9 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
       mask.draw(drawList);
       cropimg.draw( Magick::DrawableCompositeImage(0,0,0,0,mask,Magick::CopyOpacityCompositeOp) );
 
+      if( transp_xpath != NULL )
+        throw runtime_error( "PageXML.crop: transp_xpath not implemented for __PAGEXML_MAGICK__" );
+
 #elif defined (__PAGEXML_CVIMG__)
       /// Subtract crop window offset and round points ///
       std::vector<cv::Point> rcoods;
@@ -749,9 +787,34 @@ vector<NamedImage> PageXML::crop( const char* xpath ) {
         rcoods.push_back( cv::Point( round(coord.x-cropX), round(coord.y-cropY) ) );
       polys.push_back(rcoods);
 
-      /// Add alpha channel to image ///
+      /// Draw opaque polygon for Coords ///
       cv::Mat wmask( cropimg.size(), CV_MAKE_TYPE(cropimg.type(),cropimg.channels()+1), cv::Scalar(0,0,0,0) );
       cv::fillPoly( wmask, polys, cv::Scalar(0,0,0,255) );
+
+      /// Draw semi-transparent polygons according to xpath ///
+      if( transp_xpath != NULL ) {
+        vector<xmlNodePtr> child_coords = select( transp_xpath, node );
+
+        polys.clear();
+        for( int m=0; m<(int)child_coords.size(); m++ ) {
+          xmlNodePtr childnode = child_coords[m];
+
+          string childid;
+          getAttr( childnode->parent, "id", childid );
+
+          if( ! getAttr( childnode, "points", spoints ) )
+            throw runtime_error( string("PageXML.crop: expected a points attribute in Coords element: id=") + childid );
+          stringToPoints( spoints, coords );
+
+          std::vector<cv::Point> rcoods;
+          for( auto&& coord : coords )
+            rcoods.push_back( cv::Point( round(coord.x-cropX), round(coord.y-cropY) ) );
+          polys.push_back(rcoods);
+        }
+        cv::fillPoly( wmask, polys, cv::Scalar(0,0,0,128) );
+      }
+
+      /// Add alpha channel to image ///
       int from_to[] = { 0,0, 1,1, 2,2 };
       cv::mixChannels( &cropimg, 1, &wmask, 1, from_to, cropimg.channels() );
       cropimg = wmask;
@@ -956,6 +1019,16 @@ xmlNodePtr PageXML::addElem( const string name, const string id, const string xp
     throw runtime_error( string("PageXML.addElem: unmatched target: xpath=") + xpath );
 
   return addElem( name.c_str(), id.c_str(), target[0], itype, checkid );
+}
+
+/**
+ * Removes the given element.
+ *
+ * @param node   Element.
+ */
+void PageXML::rmElem( const xmlNodePtr& node ) {
+  xmlUnlinkNode(node);
+  xmlFreeNode(node);
 }
 
 /**
@@ -1621,4 +1694,59 @@ int PageXML::simplifyIDs() {
   }
 
   return simplified;
+}
+
+#if defined (__PAGEXML_OGR__)
+
+/**
+ * Gets the element's Coors as an OGRMultiPolygon.
+ *
+ * @param node       The element from which to extract the Coords points.
+ * @return           Pointer to OGRMultiPolygon element.
+ */
+OGRMultiPolygon* PageXML::getOGRpolygon( xmlNodePtr node ) {
+  std::vector<xmlNodePtr> coords = select( "_:Coords", node );
+  if ( coords.size() == 0 )
+    return NULL;
+
+  // @todo THE FOLLOWING (BASED ON STRING) IS ONLY TEMPORAL !!!! Should get points and create a polygon point by point
+  std::string pts;
+  getAttr( coords[0], "points", pts );
+  std::replace( pts.begin(), pts.end(), ',', ';');
+  std::replace( pts.begin(), pts.end(), ' ', ',');
+  std::replace( pts.begin(), pts.end(), ';', ' ');
+  std::string::size_type pos = pts.find(',');
+  pts = std::string("POLYGON ((")+pts+","+pts.substr(0,pos)+"))";
+  //const char *wkt = pts.c_str();
+  char *wkt = &pts[0];
+
+  //fprintf(stderr,"%s\n",wkt);
+
+  OGRGeometry *geom;
+  OGRGeometryFactory::createFromWkt( &wkt, NULL, &geom );
+
+  return (OGRMultiPolygon*)OGRGeometryFactory::forceToMultiPolygon(geom);
+}
+
+#endif
+
+/**
+ * Returns the XML document pointer.
+ */
+xmlDocPtr PageXML::getDocPtr() {
+  return xml;
+}
+
+/**
+ * Returns the image width.
+ */
+unsigned int PageXML::getWidth() {
+  return width;
+}
+
+/**
+ * Returns the image height.
+ */
+unsigned int PageXML::getHeight() {
+  return height;
 }

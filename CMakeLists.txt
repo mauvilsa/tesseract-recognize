@@ -2,7 +2,6 @@ cmake_minimum_required( VERSION 2.8.4 )
 project( tesseract-recognize )
 set( tool_EXE tesseract-recognize )
 include( FindPkgConfig )
-set( ENV{PKG_CONFIG_PATH} "." )
 pkg_check_modules( lept REQUIRED lept )
 pkg_check_modules( tesseract REQUIRED tesseract )
 pkg_check_modules( opencv REQUIRED opencv>=2.4 )
@@ -18,7 +17,7 @@ add_definitions( -D__PAGEXML_LEPT__ )
 
 set( CMAKE_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES};${opencv_INCLUDE_DIRS}" )
 
-string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${opencv_CFLAGS} ${libxml_CFLAGS}" )
+string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${lept_CFLAGS} ${tesseract_CFLAGS} ${opencv_CFLAGS} ${libxml_CFLAGS}" )
 set_target_properties( ${tool_EXE} PROPERTIES COMPILE_FLAGS "${CFLAGS_STR}" )
 
 #target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} -lOpenCL )

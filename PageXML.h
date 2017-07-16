@@ -1,7 +1,7 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Version: 2017.06.09$
+ * @version $Version: 2017.07.12$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -23,6 +23,10 @@
 #include <../leptonica/allheaders.h>
 #elif defined (__PAGEXML_MAGICK__)
 #include <Magick++.h>
+#endif
+
+#if defined (__PAGEXML_OGR__)
+#include <ogrsf_frmts.h>
 #endif
 
 enum PAGEXML_SETTING {
@@ -92,6 +96,7 @@ class PageXML {
   public:
     static const char* settingNames[];
     static char* version();
+    static void printVersions( FILE* file );
     ~PageXML();
     PageXML();
 #if defined (__PAGEXML_LIBCONFIG__)
@@ -108,7 +113,7 @@ class PageXML {
 #endif
     int simplifyIDs();
     bool uniqueIDs();
-    std::vector<NamedImage> crop( const char* xpath );
+    std::vector<NamedImage> crop( const char* xpath, cv::Point2f* margin = NULL, bool opaque_coords = true, const char* transp_xpath = NULL );
     static void stringToPoints( const char* spoints, std::vector<cv::Point2f>& points );
     static void stringToPoints( std::string spoints, std::vector<cv::Point2f>& points );
     static std::string pointsToString( std::vector<cv::Point2f> points, bool rounded = false );
@@ -129,6 +134,7 @@ class PageXML {
     xmlNodePtr addElem( const char* name,       const char* id,       const xmlNodePtr node,   PAGEXML_INSERT itype = PAGEXML_INSERT_CHILD, bool checkid = false );
     xmlNodePtr addElem( const char* name,       const char* id,       const char* xpath,       PAGEXML_INSERT itype = PAGEXML_INSERT_CHILD, bool checkid = false );
     xmlNodePtr addElem( const std::string name, const std::string id, const std::string xpath, PAGEXML_INSERT itype = PAGEXML_INSERT_CHILD, bool checkid = false );
+    void rmElem( const xmlNodePtr& node );
     int rmElems( const std::vector<xmlNodePtr>& nodes );
     int rmElems( const char* xpath,       xmlNodePtr basenode = NULL );
     int rmElems( const std::string xpath, xmlNodePtr basenode = NULL );
@@ -157,6 +163,12 @@ class PageXML {
     xmlNodePtr addTextRegion( const char* id = NULL, const char* before_id = NULL );
     char* getBase();
     int write( const char* fname = "-" );
+#if defined (__PAGEXML_OGR__)
+    OGRMultiPolygon* getOGRpolygon( const xmlNodePtr node );
+#endif
+    xmlDocPtr getDocPtr();
+    unsigned int getWidth();
+    unsigned int getHeight();
   private:
     bool indent = true;
     bool grayimg = false;
