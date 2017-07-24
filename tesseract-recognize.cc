@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.06.09$
+ * @version $Version: 2017.07.24$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.06.09";
+static char version[] = "Version: 2017.07.24";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -298,7 +298,7 @@ int main( int argc, char *argv[] ) {
     }
     if ( gb_image != NULL )
       page.loadImage( gb_image );
-    images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str() );
+    images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
   }
 
   /// Input is image ///
