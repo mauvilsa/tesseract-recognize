@@ -1,0 +1,44 @@
+FROM library/ubuntu:16.04
+
+MAINTAINER Mauricio Villegas <mauricio_ville@yahoo.com>
+
+
+### Install build pre-requisites ###
+RUN apt-get update --fix-missing \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      build-essential \
+      cmake \
+      git \
+      tesseract-ocr-dev \
+      libleptonica-dev \
+      libxml2-dev \
+      libopencv-dev \
+
+
+### Compile and install tesseract-recognize ###
+ && git clone https://github.com/mauvilsa/tesseract-recognize.git \
+ && cd tesseract-recognize \
+ && cmake -DCMAKE_BUILD_TYPE=Release . \
+ && make install install-docker \
+
+
+### Remove build-only software and install runtime pre-requisites ###
+ && cd \
+ && rm -rf /tesseract-recognize \
+ && apt-get purge -y \
+      ca-certificates \
+      build-essential \
+      cmake \
+      git \
+      tesseract-ocr-dev \
+      libleptonica-dev \
+      libxml2-dev \
+      libopencv-dev \
+ && apt-get autoremove -y \
+ && apt-get purge -y $(dpkg -l | awk '{if($1=="rc")print $2}') \
+ && apt-get install -y --no-install-recommends \
+      tesseract-ocr \
+      libxml2 \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
