@@ -29,15 +29,17 @@ RUN apt-get update --fix-missing \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       liblept5 \
-      libleptonica-dev
+      libleptonica-dev \
+
 
 ### Compile and install latest tesseract from repo ###
-RUN git clone https://github.com/tesseract-ocr/tesseract.git \
+ && git clone https://github.com/tesseract-ocr/tesseract.git \
  && cd tesseract \
  && ./autogen.sh \
- && ./configure --prefix=/usr \
+ && CFLAGS="-O2 -DUSE_STD_NAMESPACE" ./configure --prefix=/usr \
  && make -j$(nproc) \
  && v=$(git log --date=iso -1 | sed -n '/^Date:/{s|^Date: *||;s| .*||;s|-|.|g;p;}') \
+ && sed -i "s|TESSERACT_VERSION_STR .*|TESSERACT_VERSION_STR \"$v\"" api/baseapi.h \
  && echo "tesseract-ocr" > description-pak \
  && checkinstall -y --pkgname=tesseract-ocr --maintainer=mauricio_ville@yahoo.com --pkgversion=$v --pkgrelease=0 \
 
