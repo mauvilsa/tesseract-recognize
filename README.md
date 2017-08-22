@@ -1,6 +1,6 @@
 # NAME
 
-tesseract-recognize - A tool that does layout anaysis and/or text recognition using tesseract and outputs the result in Page XML format.
+tesseract-recognize - A tool that does layout analysis and/or text recognition using tesseract and outputs the result in Page XML format.
 
 # INSTALLATION AND USAGE
 
@@ -12,6 +12,23 @@ tesseract-recognize - A tool that does layout anaysis and/or text recognition us
     
     tesseract-recognize --help
     tesseract-recognize IMAGE OUTPUT.xml
+
+# INSTALLATION AND USAGE (DOCKER)
+
+There are two main docker images that can be chosen from (see the respective [docker hub page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)), one that uses tesseract version 3 available from the default Ubuntu repository and the other that uses the latest version found in the master branch of [github tesseract repository](https://github.com/tesseract-ocr/tesseract).
+
+The docker images does not include language files for recognition, so additional to the docker image you need to get the corresponding files and make them accessible to the container. To install first pull the docker image of your choosing, using a command such as:
+
+    docker pull mauvilsa/tesseract-recognize:latest
+
+Then copy the command line interface script to some directory in your path, so that you can easily use tesseract-recognize from the host.
+
+    docker run --rm -it -u $(id -u):$(id -g) -v $HOME:$HOME mauvilsa/tesseract-recognize:latest bash -c "cp /usr/local/bin/tesseract-recognize-docker $HOME/bin"
+
+Finally it should work like any other command, i.e.
+
+    tesseract-recognize-docker --help
+    tesseract-recognize-docker IMAGE OUTPUT.xml
 
 # VIEWING RESULTS
 
