@@ -28,8 +28,8 @@ add_custom_target( install-docker
   cp ${CMAKE_HOME_DIRECTORY}/dockerfiles/tesseract-recognize-docker ${CMAKE_INSTALL_PREFIX}/bin )
 
 add_custom_target( docker-repo
-  COMMAND docker build -t mauvilsa/tesseract-recognize:latest ${CMAKE_HOME_DIRECTORY}/dockerfiles
-  COMMAND docker tag mauvilsa/tesseract-recognize:latest mauvilsa/tesseract-recognize:$(docker run --rm -t mauvilsa/tesseract-recognize:latest bash -c "dpkg-query -W -f='${Version}' tesseract-ocr | sed 's|-.*||'") )
+  COMMAND docker build -t mauvilsa/tesseract-recognize:latest ${CMAKE_HOME_DIRECTORY}/dockerfiles )
+#  COMMAND docker tag mauvilsa/tesseract-recognize:latest mauvilsa/tesseract-recognize:$(docker run --rm -t mauvilsa/tesseract-recognize:latest bash -c "dpkg-query -W -f='\${Version}' tesseract-ocr | sed 's|-.*||'") )
 
 add_custom_target( docker-3.04
   COMMAND docker build -t mauvilsa/tesseract-recognize:3.04 -f ${CMAKE_HOME_DIRECTORY}/dockerfiles/Dockerfile_3.04 ${CMAKE_HOME_DIRECTORY}/dockerfiles )
