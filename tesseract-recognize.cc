@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.07.24$
+ * @version $Version: 2017.09.08$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.07.24";
+static char version[] = "Version: 2017.09.08";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -134,11 +134,14 @@ void print_usage() {
 void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x = 0, int y = 0 ) {
   int left, top, right, bottom;
   iter->BoundingBox( iter_level, &left, &top, &right, &bottom );
-  std::vector<cv::Point2f> points = {
-    cv::Point2f(x+left,y+top),
-    cv::Point2f(x+right,y+top),
-    cv::Point2f(x+right,y+bottom),
-    cv::Point2f(x+left,y+bottom) };
+  std::vector<cv::Point2f> points;
+  if ( left == 0 && top == 0 && right == (int)page.getWidth() && bottom == (int)page.getHeight() )
+    points = { cv::Point2f(0,0), cv::Point2f(0,0) };
+  else
+    points = { cv::Point2f(x+left,y+top),
+               cv::Point2f(x+right,y+top),
+               cv::Point2f(x+right,y+bottom),
+               cv::Point2f(x+left,y+bottom) };
   page.setCoords( xelem, points );
 }
 
@@ -315,9 +318,9 @@ int main( int argc, char *argv[] ) {
     /// Initialize Page XML ///
     char creator[128];
     if ( gb_onlylayout )
-      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s", tool, version+10, tesseract::TessBaseAPI::Version() );
+      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s", tool, version+9, tesseract::TessBaseAPI::Version() );
     else
-      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s lang=%s", tool, version+10, tesseract::TessBaseAPI::Version(), gb_lang );
+      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s lang=%s", tool, version+9, tesseract::TessBaseAPI::Version(), gb_lang );
     page.newXml( creator, input_file, pixGetWidth(namedimage.image), pixGetHeight(namedimage.image) );
   }
 

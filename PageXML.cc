@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Version: 2017.07.17$
+ * @version $Version: 2017.09.08$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -42,7 +42,7 @@ regex reDirection(".*readingDirection: *([lrt]t[rlb]) *;.*");
 /// Class version ///
 /////////////////////
 
-static char class_version[] = "Version: 2017.07.17";
+static char class_version[] = "Version: 2017.09.08";
 
 /**
  * Returns the class version.
@@ -1257,7 +1257,7 @@ bool PageXML::getFpgram( const xmlNodePtr node, vector<cv::Point2f>& fpgram ) {
  * Retrieves and parses the Coords/@points for a given base node.
  *
  * @param node   Base node.
- * @return       Pointer to the points vector, NULL if unset.
+ * @return       Reference to the points vector.
  */
 bool PageXML::getPoints( const xmlNodePtr node, vector<cv::Point2f>& points ) {
   if( node == NULL )
@@ -1274,6 +1274,41 @@ bool PageXML::getPoints( const xmlNodePtr node, vector<cv::Point2f>& points ) {
   stringToPoints( spoints.c_str(), points );
 
   return true;
+}
+
+/**
+ * Retrieves and parses the Coords/@points for a given list of base nodes.
+ *
+ * @param nodes  Base nodes.
+ * @return       Reference to the points vector.
+ */
+bool PageXML::getPoints( const std::vector<xmlNodePtr> nodes, std::vector<std::vector<cv::Point2f> >& points ) {
+  for ( int n=0; n<(int)nodes.size(); n++ ) {
+    std::vector<cv::Point2f> pts_n;
+    if ( ! getPoints( nodes[n], pts_n ) )
+      return false;
+    points.push_back(pts_n);
+  }
+  return true;
+}
+
+/**
+ * Retrieves the concatenated TextEquivs for a given root node and xpath.
+ *
+ * @param node       Root node element.
+ * @param xpath      Relative xpath to select the TextEquiv elements.
+ * @param separator  String to add between TextEquivs.
+ * @return           String with the concatenated TextEquivs.
+ */
+std::string PageXML::getTextEquiv( xmlNodePtr node, const char* xpath, const char* separator ) {
+  std::vector<xmlNodePtr> nodes = select( std::string(xpath)+"/_:TextEquiv/_:Unicode", node );
+  std::string text;
+  for ( int n=0; n<(int)nodes.size(); n++ ) {
+    xmlChar* t = xmlNodeGetContent(nodes[n]);
+    text += std::string(n==0?"":separator) + (char*)t;
+    free(t);
+  }
+  return text;
 }
 
 /**
@@ -1337,6 +1372,38 @@ xmlNodePtr PageXML::setTextEquiv( const char* xpath, const char* text, const dou
     throw runtime_error( string("PageXML.setTextEquiv: unmatched target: xpath=") + xpath );
 
   return setTextEquiv( target[0], text, conf );
+}
+
+/**
+ * Sets a Property for a given xpath.
+ *
+ * @param node  The node of element to set the Property.
+ * @param key   The key for the Property.
+ * @param val   The optional value for the Property.
+ * @return      Pointer to created element.
+ */
+xmlNodePtr PageXML::setProperty( xmlNodePtr node, const char* key, const char* val, bool uniq ) {
+  if ( uniq )
+    rmElems( select( std::string("_:Property[@key=\"")+key+"\"]", node ) );
+
+  std::vector<xmlNodePtr> props = select( "_:Property", node );
+
+  xmlNodePtr prop = props.size() > 0 ?
+    addElem( "Property", NULL, props[props.size()-1], PAGEXML_INSERT_NEXTSIB ):
+    addElem( "Property", NULL, node->xmlChildrenNode, PAGEXML_INSERT_PREVSIB );
+  if ( ! prop )
+    throw runtime_error( "PageXML.setProperty: problems creating element" );
+
+  if ( ! setAttr( prop, "key", key ) ) {
+    rmElem( prop );
+    throw runtime_error( "PageXML.setProperty: problems setting key attribute" );
+  }
+  if ( val != NULL && ! setAttr( prop, "value", val ) ) {
+    rmElem( prop );
+    throw runtime_error( "PageXML.setProperty: problems setting value attribute" );
+  }
+
+  return prop;
 }
 
 /**
@@ -1625,7 +1692,7 @@ xmlNodePtr PageXML::addTextRegion( xmlNodePtr node, const char* id, const char* 
 }
 
 /**
- * Adds a TextRegion to a given xpath.
+ * Appends a new TextRegion to the Page element.
  *
  * @param id         ID for TextRegion, if NULL it is selected automatically.
  * @param before_id  If !=NULL inserts it before the TextRegion with this ID.

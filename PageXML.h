@@ -1,7 +1,7 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Version: 2017.07.17$
+ * @version $Version: 2017.09.08$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -146,9 +146,12 @@ class PageXML {
     float getXheight( const char* id );
     bool getFpgram( const xmlNodePtr node, std::vector<cv::Point2f>& fpgram );
     bool getPoints( const xmlNodePtr node, std::vector<cv::Point2f>& points );
+    bool getPoints( const std::vector<xmlNodePtr> nodes, std::vector<std::vector<cv::Point2f> >& points );
+    std::string getTextEquiv( xmlNodePtr node, const char* xpath = ".", const char* separator = " " );
     void setLastChange();
     xmlNodePtr setTextEquiv( xmlNodePtr node,   const char* text, const double* _conf = NULL );
     xmlNodePtr setTextEquiv( const char* xpath, const char* text, const double* _conf = NULL );
+    xmlNodePtr setProperty( xmlNodePtr node, const char* key, const char* val = NULL, bool uniq = true );
     xmlNodePtr setCoords( xmlNodePtr node, const std::vector<cv::Point2f>& points );
     xmlNodePtr setCoords( const char* xpath, const std::vector<cv::Point2f>& points );
     xmlNodePtr setBaseline( xmlNodePtr node, const std::vector<cv::Point2f>& points );
