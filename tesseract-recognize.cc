@@ -131,23 +131,30 @@ void print_usage() {
 }
 
 
-void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x = 0, int y = 0 ) {
+void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x, int y, tesseract::Orientation orientation = tesseract::ORIENTATION_PAGE_UP ) {
   int left, top, right, bottom;
   iter->BoundingBox( iter_level, &left, &top, &right, &bottom );
   std::vector<cv::Point2f> points;
   if ( left == 0 && top == 0 && right == (int)page.getWidth() && bottom == (int)page.getHeight() )
     points = { cv::Point2f(0,0), cv::Point2f(0,0) };
-  else
-    points = { cv::Point2f(x+left,y+top),
-               cv::Point2f(x+right,y+top),
-               cv::Point2f(x+right,y+bottom),
-               cv::Point2f(x+left,y+bottom) };
+  else {
+    cv::Point2f tl(x+left,y+top);
+    cv::Point2f tr(x+right,y+top);
+    cv::Point2f br(x+right,y+bottom);
+    cv::Point2f bl(x+left,y+bottom);
+    switch( orientation ) {
+      case tesseract::ORIENTATION_PAGE_UP:    points = { tl, tr, br, bl }; break;
+      case tesseract::ORIENTATION_PAGE_RIGHT: points = { tr, br, bl, tl }; break;
+      case tesseract::ORIENTATION_PAGE_LEFT:  points = { bl, tl, tr, br }; break;
+      case tesseract::ORIENTATION_PAGE_DOWN:  points = { br, bl, tl, tr }; break;
+    }
+  }
   page.setCoords( xelem, points );
 }
 
-void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x = 0, int y = 0 ) {
+void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x, int y, tesseract::Orientation orientation ) {
   // @todo guaranty that baseline+cords form a polystripe
-  setCoords( iter, iter_level, page, xelem, x, y );
+  setCoords( iter, iter_level, page, xelem, x, y, orientation );
   int x1, y1, x2, y2;
   iter->Baseline( iter_level, &x1, &y1, &x2, &y2 );
   std::vector<cv::Point2f> points = {
@@ -427,7 +434,7 @@ int main( int argc, char *argv[] ) {
         }
 
         /// Set rotation and reading direction ///
-        /*tesseract::Orientation orientation;
+        tesseract::Orientation orientation;
         tesseract::WritingDirection writing_direction;
         tesseract::TextlineOrder textline_order;
         float deskew_angle;
@@ -446,7 +453,7 @@ int main( int argc, char *argv[] ) {
           case tesseract::ORIENTATION_PAGE_DOWN:  orient = 180.0; break;
         }
         page.setRotation( xreg, orient );
-        page.setReadingDirection( xreg, direct );*/
+        page.setReadingDirection( xreg, direct );
 
         /// Loop through paragraphs in current block ///
         int para = 0;
@@ -476,7 +483,7 @@ int main( int argc, char *argv[] ) {
 
             /// Set line bounding box, baseline and text ///
             if ( xline != NULL ) {
-              setLineCoords( iter, tesseract::RIL_TEXTLINE, page, xline, images[n].x, images[n].y );
+              setLineCoords( iter, tesseract::RIL_TEXTLINE, page, xline, images[n].x, images[n].y, orientation );
               if ( ! gb_onlylayout && gb_textlevels[LEVEL_LINE] )
                 setTextEquiv( iter, tesseract::RIL_TEXTLINE, page, xline, true );
             }
@@ -495,7 +502,7 @@ int main( int argc, char *argv[] ) {
 
               /// Set word bounding box and text ///
               if ( xword != NULL ) {
-                setCoords( iter, tesseract::RIL_WORD, page, xword, images[n].x, images[n].y );
+                setCoords( iter, tesseract::RIL_WORD, page, xword, images[n].x, images[n].y, orientation );
                 if ( ! gb_onlylayout && gb_textlevels[LEVEL_WORD] )
                   setTextEquiv( iter, tesseract::RIL_WORD, page, xword );
               }
@@ -506,7 +513,7 @@ int main( int argc, char *argv[] ) {
                 xmlNodePtr xglyph = node_level == LEVEL_GLYPH ? node : page.addGlyph( xword );
 
                 /// Set symbol bounding box and text ///
-                setCoords( iter, tesseract::RIL_SYMBOL, page, xglyph, images[n].x, images[n].y );
+                setCoords( iter, tesseract::RIL_SYMBOL, page, xglyph, images[n].x, images[n].y, orientation );
                 if ( ! gb_onlylayout && gb_textlevels[LEVEL_GLYPH] )
                   setTextEquiv( iter, tesseract::RIL_SYMBOL, page, xglyph );
 
