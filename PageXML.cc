@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Version: 2017.09.08$
+ * @version $Version: 2017.10.11$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -42,7 +42,7 @@ regex reDirection(".*readingDirection: *([lrt]t[rlb]) *;.*");
 /// Class version ///
 /////////////////////
 
-static char class_version[] = "Version: 2017.09.08";
+static char class_version[] = "Version: 2017.10.11";
 
 /**
  * Returns the class version.
@@ -1762,6 +1762,25 @@ int PageXML::simplifyIDs() {
 
   return simplified;
 }
+
+/**
+ * Modifies imageFilename to be a relative path w.r.t. xml path. Currently just checks prefix directories and removes it.
+ */
+void PageXML::relativeImageFilename( const char* xml_path ) {
+  string xml_base = regex_replace(xml_path,regex("/[^/]+$"),"/");
+
+  vector<xmlNodePtr> pages = select( "//_:Page" );
+
+  for ( int n=(int)pages.size()-1; n>=0; n-- ) {
+    std::string img;
+    getAttr( pages[n], "imageFilename", img );
+    if ( img.compare(0, xml_base.length(), xml_base) == 0 ) {
+      img.erase(0,xml_base.length());
+      setAttr( pages[n], "imageFilename", img.c_str() );
+    }
+  }
+}
+
 
 #if defined (__PAGEXML_OGR__)
 

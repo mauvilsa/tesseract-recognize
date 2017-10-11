@@ -42,11 +42,16 @@ update_file_version () {
 n=1;
 while [ "$n" -lt "${#FILES[@]}" ]; do
   case "${FILES[$n]}" in
-    tesseract-recognize.cc )
+    tesseract-recognize.cc | *.py )
       check_change_after_staged "${FILES[$n]}" "${FILES[$((n+1))]}";
       update_file_version "${FILES[$n]}";
       ;;
   esac
+  if [ "${FILES[$n]:$((${#FILES[$n]}-3))}" = ".py" ]; then
+    echo "${0##*/}: pylint ${FILES[$n]}" 1>&2;
+    pylint --errors-only "${FILES[$n]}";
+  fi
+  [ "$?" != "0" ] && exit 1;
   n=$((n+2));
 done
 

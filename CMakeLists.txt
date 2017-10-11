@@ -25,13 +25,6 @@ target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv
 
 install( TARGETS ${tool_EXE} DESTINATION bin )
 add_custom_target( install-docker
-  cp ${CMAKE_HOME_DIRECTORY}/dockerfiles/tesseract-recognize-docker ${CMAKE_INSTALL_PREFIX}/bin )
-
-add_custom_target( docker-repo
-  COMMAND docker build -t mauvilsa/tesseract-recognize:latest ${CMAKE_HOME_DIRECTORY}/dockerfiles )
-#  COMMAND docker tag mauvilsa/tesseract-recognize:latest mauvilsa/tesseract-recognize:$(docker run --rm -t mauvilsa/tesseract-recognize:latest bash -c "dpkg-query -W -f='\${Version}' tesseract-ocr | sed 's|-.*||'") )
-
-add_custom_target( docker-3.04
-  COMMAND docker build -t mauvilsa/tesseract-recognize:3.04 -f ${CMAKE_HOME_DIRECTORY}/dockerfiles/Dockerfile_3.04 ${CMAKE_HOME_DIRECTORY}/dockerfiles )
+  cp ${CMAKE_HOME_DIRECTORY}/tesseract-recognize-docker ${CMAKE_HOME_DIRECTORY}/tesseract_recognize_api.py ${CMAKE_INSTALL_PREFIX}/bin )
 
 add_custom_target( realclean cd ${CMAKE_HOME_DIRECTORY} COMMAND rm -fr ${tool_EXE} ${tool_EXE}.exe ${tool_EXE}.dSYM CMakeFiles CMakeCache.txt cmake_install.cmake install_manifest.txt Makefile )

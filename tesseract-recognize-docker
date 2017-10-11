@@ -4,12 +4,12 @@ if ( [ "$#" = 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ] ); then
   echo "
 Command line interface to the tesseract-recognize tool in a docker container.
 It assumes that docker is installed, that it can be executed without sudo and
-that the corresponding image is called mauvilsa/tesseract-recognize. It will
-only work if the arguments do not contain spaces or special characters for
-bash and is executed from and referencing only files in the host's /home,
-/mnt, /media, /opt or /tmp directories.
+that the corresponding image is tagged as tesseract-recognize:active. It will
+only work if the arguments do not contain spaces or special characters
+according to bash and is executed from and referencing only files in the
+host's /home, /mnt, /media, /opt or /tmp directories.
 ";
-  docker run --rm -t mauvilsa/tesseract-recognize tesseract-recognize --help
+  docker run --rm -t tesseract-recognize:active tesseract-recognize --help
   exit 0;
 fi
 
@@ -20,5 +20,5 @@ OPTS=( -u $(id -u):$(id -g) );
 [ -d "/opt" ]   && OPTS+=( -v /opt:/opt );
 [ -d "/tmp" ]   && OPTS+=( -v /tmp:/tmp );
 
-docker run --rm -t "${OPTS[@]}" mauvilsa/tesseract-recognize \
+docker run --rm -t "${OPTS[@]}" tesseract-recognize:active \
   bash -c "cd $(pwd) && tesseract-recognize $*";

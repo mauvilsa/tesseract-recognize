@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.09.08$
+ * @version $Version: 2017.10.11$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.09.08";
+static char version[] = "Version: 2017.10.11";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -543,9 +543,15 @@ int main( int argc, char *argv[] ) {
 
   } // for ( n=0; n<(int)images.size(); n++ ) {
 
+  /// Try to make imageFilename be a relative path w.r.t. the output XML ///
+  if ( ! input_xml && ! gb_inplace && optind < argc )
+    page.relativeImageFilename(argv[optind]);
+
   /// Write resulting XML ///
   page.setLastChange();
-  page.write( gb_inplace ? input_file : optind < argc ? argv[optind] : "-" );
+  int bytes = page.write( gb_inplace ? input_file : optind < argc ? argv[optind] : "-" );
+  if ( bytes <= 0 )
+    fprintf( stderr, "%s: error: problems writing to output xml\n", tool );
 
   /// Release resources ///
   for ( n=0; n<(int)images.size(); n++ )
@@ -554,5 +560,5 @@ int main( int argc, char *argv[] ) {
   delete tessApi;
   delete iter;
 
-  return 0;
+  return bytes <= 0 ? 1 : 0;
 }
