@@ -40,7 +40,7 @@ RUN apt-get update --fix-missing \
 ### Compile and install latest tesseract from repo ###
  && git clone https://github.com/tesseract-ocr/tesseract.git /tmp/tesseract \
  && cd /tmp/tesseract \
- #&& git checkout 323f26f6cc60a2ea1e7b4fd5f347406080dcf241 \
+ && git checkout 323f26f6cc60a2ea1e7b4fd5f347406080dcf241 \
  && v=$(git log --date=iso -1 | sed -n '/^Date:/{s|^Date: *||;s| .*||;s|-|.|g;p;}') \
  && sed -i "s|TESSERACT_VERSION_STR .*|TESSERACT_VERSION_STR \"$v\"|" api/baseapi.h \
  && ./autogen.sh \

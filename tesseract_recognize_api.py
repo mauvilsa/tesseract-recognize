@@ -55,25 +55,36 @@ def tesseract_recognize(): # pylint: disable=too-many-return-statements
     try:
         data = request.json
 
-        ### Check input file(s) ###
-        if 'input_file' not in data or \
-           not isinstance(data['input_file'], string_types):
-            return resp400('expected input_file as a string')
-        if not os.path.isfile(data['input_file']):
-            return resp400('input file not found: '+data['input_file'])
-
-        ### Check output file ###
-        if 'output_file' not in data or \
-           not isinstance(data['output_file'], string_types):
-            return resp400('expected output_file as a string')
-
-        ### Generate command list with additional options if present ###
-        cmd = ['/usr/local/bin/tesseract-recognize', data['input_file'], data['output_file']]
+        ### Check options ###
         if 'options' in data:
             if not isinstance(data['options'], list) or \
                not all(isinstance(i, string_types) for i in data['options']):
                 return resp400('expected options as an array of strings')
-            cmd.extend(data['options'])
+        else:
+            data['options'] = []
+
+        info_option = any([op == "-h" or op == "--help" or \
+                           op == "-v" or op == "--version" \
+                           for op in data['options']])
+
+        if not info_option:
+            ### Check input file ###
+            if 'input_file' not in data or \
+               not isinstance(data['input_file'], string_types):
+                return resp400('expected input_file as a string')
+            if not os.path.isfile(data['input_file']):
+                return resp400('input file not found: '+data['input_file'])
+
+            ### Check output file ###
+            if 'output_file' not in data or \
+               not isinstance(data['output_file'], string_types):
+                return resp400('expected output_file as a string')
+
+        ### Generate command list with additional options if present ###
+        cmd = ['/usr/local/bin/tesseract-recognize']
+        cmd.extend(data['options'])
+        if not info_option:
+            cmd.extend([data['input_file'], data['output_file']])
 
         ### Execute tesseract-recognize command ###
         proc = Popen(cmd, shell=False, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
@@ -82,7 +93,7 @@ def tesseract_recognize(): # pylint: disable=too-many-return-statements
         cmd_rc = proc.returncode
 
         ### Response depending on the case ###
-        msg = 'command='+cmd+' output='+cmd_out
+        msg = 'command='+(' '.join(cmd))+' output='+cmd_out
         if cmd_rc != 0:
             return resp400('execution failed: '+msg+' return_code='+str(cmd_rc))
         return resp200('execution successful: '+msg)
