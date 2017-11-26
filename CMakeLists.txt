@@ -6,6 +6,7 @@ pkg_check_modules( lept REQUIRED lept )
 pkg_check_modules( tesseract REQUIRED tesseract )
 pkg_check_modules( opencv REQUIRED opencv>=2.4 )
 pkg_check_modules( libxml REQUIRED libxml-2.0>=2.9 )
+pkg_check_modules( libxslt REQUIRED libxslt )
 
 file( GLOB tool_SRC "*.cc" )
 add_executable( ${tool_EXE} ${tool_SRC} )
@@ -17,11 +18,11 @@ add_definitions( -D__PAGEXML_LEPT__ )
 
 set( CMAKE_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES};${opencv_INCLUDE_DIRS}" )
 
-string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${lept_CFLAGS} ${tesseract_CFLAGS} ${opencv_CFLAGS} ${libxml_CFLAGS}" )
+string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${lept_CFLAGS} ${tesseract_CFLAGS} ${opencv_CFLAGS} ${libxml_CFLAGS} ${libxslt_CFLAGS}" )
 set_target_properties( ${tool_EXE} PROPERTIES COMPILE_FLAGS "${CFLAGS_STR}" )
 
 #target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} -lOpenCL )
-target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} )
+target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} ${libxslt_LDFLAGS} )
 
 install( TARGETS ${tool_EXE} DESTINATION bin )
 add_custom_target( install-docker

@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.10.11$
+ * @version $Version: 2017.11.26$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.10.11";
+static char version[] = "Version: 2017.11.26";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -135,7 +135,7 @@ void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel it
   int left, top, right, bottom;
   iter->BoundingBox( iter_level, &left, &top, &right, &bottom );
   std::vector<cv::Point2f> points;
-  if ( left == 0 && top == 0 && right == (int)page.getWidth() && bottom == (int)page.getHeight() )
+  if ( left == 0 && top == 0 && right == (int)page.getPageWidth(0) && bottom == (int)page.getPageHeight(0) )
     points = { cv::Point2f(0,0), cv::Point2f(0,0) };
   else {
     cv::Point2f tl(x+left,y+top);
@@ -260,7 +260,7 @@ int main( int argc, char *argv[] ) {
   if ( gb_textatlayout )
     gb_textlevels[gb_layoutlevel] = true;
 
-  /// Check that there is at least one and at most two non-option arguments /// 
+  /// Check that there is at least one and at most two non-option arguments ///
   if ( optind >= argc || argc - optind > 2 ) {
     fprintf( stderr, "%s: error: incorrect input arguments, see usage with --help\n", tool );
     return 1;
@@ -285,6 +285,7 @@ int main( int argc, char *argv[] ) {
 
   char *input_file = argv[optind++];
   PageXML page;
+  bool pixRelease = true;
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
 
@@ -298,6 +299,13 @@ int main( int argc, char *argv[] ) {
     gb_inplace = false;
   }
 
+  /// Info for process element ///
+  char tool_info[128];
+  if ( gb_onlylayout )
+    snprintf( tool_info, sizeof tool_info, "%s_v%.10s tesseract_v%s", tool, version+9, tesseract::TessBaseAPI::Version() );
+  else
+    snprintf( tool_info, sizeof tool_info, "%s_v%.10s tesseract_v%s lang=%s", tool, version+9, tesseract::TessBaseAPI::Version(), gb_lang );
+
   /// Input is xml ///
   if ( input_xml ) {
     try {
@@ -306,33 +314,55 @@ int main( int argc, char *argv[] ) {
       fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
       return 1;
     }
+    page.processStart(tool_info);
     if ( gb_image != NULL )
-      page.loadImage( gb_image );
-    images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
+      page.loadImage( 0, gb_image );
+
+    std::vector<xmlNodePtr> sel = page.select(gb_xpath);
+    int selPages = 0;
+    for ( n=0; n<(int)sel.size(); n++ )
+      if ( page.nodeIs( sel[n], "Page" ) )
+        selPages++;
+    if ( selPages > 0 && selPages != (int)sel.size() ) {
+      fprintf( stderr, "%s: error: xpath can select Page or non-Page elements but not a mixture of both: %s\n", tool, gb_xpath );
+      return 1;
+    }
+
+    if ( selPages == 0 )
+      images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
+    else {
+      pixRelease = false;
+      for ( n=0; n<(int)sel.size(); n++ ) {
+        NamedImage namedimage;
+        namedimage.image = page.getPageImage(sel[n]);
+        namedimage.node = sel[n];
+        images.push_back( namedimage );
+      }
+    }
   }
 
   /// Input is image ///
   else {
     /// Read input image ///
-    NamedImage namedimage;
-    namedimage.image = pixRead( input_file );
-    if ( namedimage.image == NULL ) {
+    PageImage image = pixRead( input_file );
+    if ( image == NULL ) {
       fprintf( stderr, "%s: error: problems reading image: %s\n", tool, input_file );
       return 1;
     }
-    images.push_back( namedimage );
 
     /// Initialize Page XML ///
-    char creator[128];
-    if ( gb_onlylayout )
-      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s", tool, version+9, tesseract::TessBaseAPI::Version() );
-    else
-      snprintf( creator, sizeof creator, "%s_v%.10s tesseract_v%s lang=%s", tool, version+9, tesseract::TessBaseAPI::Version(), gb_lang );
-    page.newXml( creator, input_file, pixGetWidth(namedimage.image), pixGetHeight(namedimage.image) );
+    page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
+    page.processStart(tool_info);
+
+    NamedImage namedimage;
+    namedimage.image = image;
+    namedimage.node = page.selectNth( "//_:Page", 0 );
+    images.push_back( namedimage );
   }
 
   /// Loop through all images to process ///
   for ( n=0; n<(int)images.size(); n++ ) {
+    xmlNodePtr xpg = page.closest( "Page", images[n].node );
     tessApi->SetImage( images[n].image );
     if ( gb_save_crops && input_xml ) {
       std::string fout = std::string("crop_")+std::to_string(n)+"_"+images[n].id+".png";
@@ -425,7 +455,7 @@ int main( int argc, char *argv[] ) {
 
         /// Otherwise add block as TextRegion element ///
         else if ( node_level < LEVEL_REGION ) {
-          xreg = page.addTextRegion( rid.c_str() );
+          xreg = page.addTextRegion( xpg, rid.c_str() );
 
           /// Set block bounding box and text ///
           setCoords( iter, tesseract::RIL_BLOCK, page, xreg, images[n].x, images[n].y );
@@ -545,17 +575,17 @@ int main( int argc, char *argv[] ) {
 
   /// Try to make imageFilename be a relative path w.r.t. the output XML ///
   if ( ! input_xml && ! gb_inplace && optind < argc )
-    page.relativeImageFilename(argv[optind]);
+    page.relativizeImageFilename(argv[optind]);
 
   /// Write resulting XML ///
-  page.setLastChange();
   int bytes = page.write( gb_inplace ? input_file : optind < argc ? argv[optind] : "-" );
   if ( bytes <= 0 )
     fprintf( stderr, "%s: error: problems writing to output xml\n", tool );
 
   /// Release resources ///
-  for ( n=0; n<(int)images.size(); n++ )
-    pixDestroy(&(images[n].image));
+  if ( pixRelease )
+    for ( n=0; n<(int)images.size(); n++ )
+      pixDestroy(&(images[n].image));
   tessApi->End();
   delete tessApi;
   delete iter;
