@@ -18,6 +18,7 @@ RUN apt-get update --fix-missing \
       cmake \
       git \
       libxml2-dev \
+      libxslt1-dev \
       libopencv-dev \
       libtool \
       automake \
@@ -66,6 +67,7 @@ RUN apt-get update --fix-missing \
       cmake \
       git \
       libxml2-dev \
+      libxslt1-dev \
       libopencv-dev \
       libtool \
       automake \
@@ -76,6 +78,7 @@ RUN apt-get update --fix-missing \
  && apt-get purge -y $(dpkg -l | awk '{if($1=="rc")print $2}') \
  && apt-get install -y --no-install-recommends \
       libxml2 \
+      libxslt1.1 \
       libgomp1 \
       python-flask \
       python-six \

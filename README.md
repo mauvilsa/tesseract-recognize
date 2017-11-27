@@ -2,6 +2,8 @@
 
 tesseract-recognize - A tool that does layout analysis and/or text recognition using tesseract and outputs the result in Page XML format.
 
+[![Docker Automated build](https://img.shields.io/docker/build/mauvilsa/tesseract-recognize.svg)]()
+
 
 # INSTALLATION AND USAGE
 
