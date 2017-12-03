@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Version: 2017.11.26$
+ * @version $Version: 2017.12.03$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -45,7 +45,7 @@ regex reInvalidBaseChars(" ");
 /// Class version ///
 /////////////////////
 
-static char class_version[] = "Version: 2017.11.26";
+static char class_version[] = "Version: 2017.12.03";
 
 /**
  * Returns the class version.
@@ -160,6 +160,23 @@ int PageXML::write( const char* fname ) {
   //return xmlSaveFormatFileEnc( fname, xml, "utf-8", indent );
 }
 
+/**
+ * Creates a string representation of the Page XML.
+ */
+string PageXML::toString() {
+  string sxml;
+  xmlChar *cxml;
+  int size;
+  xmlDocDumpMemory(xml, &cxml, &size);
+  if ( cxml == NULL ) {
+    throw_runtime_error( "PageXML.toString: problem dumping to memory" );
+    return sxml;
+  }
+  sxml = string((char*)cxml);
+  xmlFree(cxml);
+  return sxml;
+}
+
 
 /////////////////////
 /// Configuration ///
@@ -242,7 +259,7 @@ void PageXML::printConf( FILE* file ) {
  * @param imgW     Width of image.
  * @param imgH     Height of image.
  */
-void PageXML::newXml( const char* creator, const char* image, const int imgW, const int imgH ) {
+xmlNodePtr PageXML::newXml( const char* creator, const char* image, const int imgW, const int imgH ) {
   release();
 
   time_t now;
@@ -281,9 +298,12 @@ void PageXML::newXml( const char* creator, const char* image, const int imgW, co
     setAttr( "//_:Page", "imageHeight", to_string(height).c_str() );
 #else
     throw_runtime_error( "PageXML.newXml: invalid image size" );
-    return;
+    release();
+    return NULL;
 #endif
   }
+
+  return selectNth( "//_:Page", 0 );
 }
 
 /**
@@ -324,6 +344,26 @@ void PageXML::loadXml( int fnum, bool prevfree ) {
 
   xmlKeepBlanksDefault(0);
   xml = xmlReadFd( fnum, NULL, NULL, XML_PARSE_NONET );
+  if ( ! xml ) {
+   throw_runtime_error( "PageXML.loadXml: problems reading file" );
+   return;
+  }
+  setupXml();
+}
+
+/**
+ * Loads a Page XML from a string.
+ *
+ * @param xml_string  The XML content.
+ */
+void PageXML::loadXmlString( const char* xml_string ) {
+  release();
+
+  xml = xmlParseDoc( (xmlChar*)xml_string );
+  if ( ! xml ) {
+   throw_runtime_error( "PageXML.loadXml: problems reading XML from string" );
+   return;
+  }
   setupXml();
 }
 
@@ -385,7 +425,9 @@ void PageXML::setupXml() {
 /**
  * Loads an image for the Page XML.
  *
- * @param fname  File name of the image to read.
+ * @param pagenum  The number of the page to load the image.
+ * @param fname    File name of the image to read overriding the one in the XML.
+ * @param fname    Whether to check that size of image agrees with XML.
  */
 void PageXML::loadImage( int pagenum, const char* fname, const bool check_size ) {
   string aux;
@@ -430,9 +472,8 @@ void PageXML::loadImage( int pagenum, const char* fname, const bool check_size )
 #endif
   }
 
-  // @todo Check image orientation and rotate if != 0
-
-  if( check_size ) {
+  /// Check that image size agrees with XML ///
+  if ( check_size ) {
     int width = getPageWidth(pagenum);
     int height = getPageHeight(pagenum);
 #if defined (__PAGEXML_LEPT__)
@@ -443,6 +484,57 @@ void PageXML::loadImage( int pagenum, const char* fname, const bool check_size )
     if( width != pagesImage[pagenum].size().width || height != pagesImage[pagenum].size().height )
 #endif
       throw_runtime_error( "PageXML.loadImage: discrepancy between image and xml page size: %s", fname );
+  }
+
+  /// Check image orientation and rotate accordingly ///
+  int angle = getPageImageOrientation( pagenum );
+  if ( angle ) {
+#if defined (__PAGEXML_LEPT__)
+    Pix *orig = pagesImage[pagenum];
+    if ( angle == 90 )
+      pagesImage[pagenum] = pixRotateOrth(orig,1);
+    else if ( angle == 180 )
+      pagesImage[pagenum] = pixRotateOrth(orig,2);
+    else if ( angle == -90 )
+      pagesImage[pagenum] = pixRotateOrth(orig,3);
+    pixDestroy(&orig);
+#elif defined (__PAGEXML_MAGICK__)
+    int width_orig = pagesImage[pagenum].columns();
+    int height_orig = pagesImage[pagenum].rows();
+    int width_rot = angle == 180 ? width_orig : height_orig;
+    int height_rot = angle == 180 ? height_orig : width_orig;
+    Magick::Image rotated( Magick::Geometry(width_rot, height_rot), Magick::Color("black") );
+    Magick::Pixels view_orig(pagesImage[pagenum]);
+    Magick::Pixels view_rot(rotated);
+    const Magick::PixelPacket *pixs_orig = view_orig.getConst( 0, 0, width_orig, height_orig );
+    Magick::PixelPacket *pixs_rot = view_rot.get( 0, 0, width_rot, height_rot );
+    if ( angle == 90 ) {
+      for( int y=0, n=0; y<height_orig; y++ )
+        for( int x=0; x<width_orig; x++, n++ )
+          pixs_rot[x*width_rot+(width_rot-1-y)] = pixs_orig[n];
+    }
+    else if ( angle == 180 ) {
+      for( int y=0, n=0; y<height_orig; y++ )
+        for( int x=0; x<width_orig; x++, n++ )
+          pixs_rot[(height_rot-1-y)*width_rot+(width_rot-1-x)] = pixs_orig[n];
+    }
+    else if ( angle == -90 ) {
+      for( int y=0, n=0; y<height_orig; y++ )
+        for( int x=0; x<width_orig; x++, n++ )
+          pixs_rot[(height_rot-1-x)*width_rot+y] = pixs_orig[n];
+    }
+    view_rot.sync();
+    pagesImage[pagenum] = rotated;
+#elif defined (__PAGEXML_CVIMG__)
+    PageImage rotated;
+    if ( angle == 90 )
+      cv::rotate( pagesImage[pagenum], rotated, ROTATE_90_CLOCKWISE );
+    else if ( angle == 180 )
+      cv::rotate( pagesImage[pagenum], rotated, ROTATE_180 );
+    else if ( angle == -90 )
+      cv::rotate( pagesImage[pagenum], rotated, ROTATE_90_COUNTERCLOCKWISE );
+    pagesImage[pagenum] = rotated;
+#endif
   }
 }
 
@@ -1422,75 +1514,6 @@ std::string PageXML::getTextEquiv( xmlNodePtr node, const char* xpath, const cha
 }
 
 /**
- * Registers a process in the Page XML.
- */
-/*void PageXML::registerProcess( const char* tool, const char* ref ) {
-  if( tool == NULL || tool[0] == '\0' ) {
-    throw_runtime_error( "PageXML.registerProcess: tool string is required" );
-    return;
-  }
-
-  if( ref != NULL && ref[0] == '\0' ) {
-    throw_runtime_error( "PageXML.registerProcess: ref if provided cannot be empty" );
-    return;
-  }
-
-  time_t now;
-  time(&now);
-  char tstamp[sizeof "YYYY-MM-DDTHH:MM:SSZ"];
-  strftime(tstamp, sizeof tstamp, "%FT%TZ", gmtime(&now));
-
-  /// Set Process element ///
-  xmlNodePtr proc = NULL;
-  std::vector<xmlNodePtr> procs = select("//_:Process");
-  if ( procs.size() > 0 && count( string("@tool[.=\"")+tool+"\"]", procs[procs.size()-1] ) > 0 ) {
-    string prevdate;
-    getAttr( procs[procs.size()-1], "date", prevdate );
-    std::istringstream ss(prevdate);
-    struct std::tm tm;
-    ss >> std::get_time( &tm, "%FT%TZ" );
-    std::time_t prevt = mktime(&tm) - timezone;
-    if ( now-prevt < 12*3600 )
-      proc = procs[procs.size()-1];
-  }
-  if ( ! proc ) {
-    //string pid = string("pr")+to_string(procs.size()+1);
-    //proc = addElem( "Process", pid.c_str(), "//_:Metadata" );
-    proc = addElem( "Process", NULL, "//_:Metadata" );
-  }
-  if ( ! proc ) {
-    throw_runtime_error( "PageXML.registerProcess: problems creating or selecting element" );
-    return;
-  }
-  if ( ! setAttr( proc, "date", tstamp ) ) {
-    throw_runtime_error( "PageXML.registerProcess: problems setting date attribute" );
-    return;
-  }
-  if ( ! setAttr( proc, "tool", tool ) ) {
-    throw_runtime_error( "PageXML.registerProcess: problems setting tool attribute" );
-    return;
-  }
-  if ( ref != NULL )
-    if ( ! setAttr( proc, "ref", ref ) ) {
-      throw_runtime_error( "PageXML.registerProcess: problems setting ref attribute" );
-      return;
-    }
-
-  /// Update last change ///
-  vector<xmlNodePtr> lastchange = select( "//_:LastChange" );
-  if( lastchange.size() != 1 ) {
-    throw_runtime_error( "PageXML.registerProcess: unable to select node" );
-    return;
-  }
-  rmElems( select( "text()", lastchange[0] ) );
-  xmlNodePtr text = xmlNewText( (xmlChar*)tstamp );
-  if( ! text || ! xmlAddChild(lastchange[0],text) ) {
-    throw_runtime_error( "PageXML.registerProcess: problems updating time stamp" );
-    return;
-  }
-}*/
-
-/**
  * Starts a process in the Page XML.
  */
 void PageXML::processStart( const char* tool, const char* ref ) {
@@ -1949,6 +1972,7 @@ void PageXML::setPageImageOrientation( int pagenum, int angle, const double* _co
  * Gets the image orientation for the given node.
  *
  * @param node   A node to get its image orientation.
+ * @return       Orientation in degrees.
  */
 int PageXML::getPageImageOrientation( xmlNodePtr node ) {
   node = selectNth( "ancestor-or-self::*[local-name()='Page']", 0, node );
@@ -2001,6 +2025,20 @@ unsigned int PageXML::getPageHeight( xmlNodePtr node ) {
 }
 unsigned int PageXML::getPageWidth( int pagenum ) {
   return getPageWidth( selectNth("//_:Page",pagenum) );
+}
+
+/**
+ * Sets the imageFilename of a page.
+ */
+void PageXML::setPageImageFilename( xmlNodePtr node, const char* image ) {
+  if( ! nodeIs( node, "Page" ) ) {
+    throw_runtime_error( "PageXML.setPageImageFilename: node is required to be a Page" );
+    return;
+  }
+  setAttr( node, "imageFilename", image );
+}
+void PageXML::setPageImageFilename( int pagenum, const char* image ) {
+  return setPageImageFilename( selectNth("//_:Page",pagenum), image );
 }
 
 /**

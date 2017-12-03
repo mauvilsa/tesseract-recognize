@@ -1,7 +1,7 @@
 /**
  * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.11.26$
+ * @version $Version: 2017.12.03$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.11.26";
+static char version[] = "Version: 2017.12.03";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -290,8 +290,11 @@ int main( int argc, char *argv[] ) {
   tesseract::ResultIterator* iter = NULL;
 
   std::regex reXml(".+\\.xml$|^-$",std::regex_constants::icase);
+  std::regex reTiff(".+\\.tif{1,2}$|^-$",std::regex_constants::icase);
   std::cmatch base_match;
   bool input_xml = std::regex_match(input_file,base_match,reXml);
+  bool input_tiff = std::regex_match(input_file,base_match,reTiff);
+  bool multipage = false;
 
   /// Inplace only when one non-option argument and XML input ///
   if ( gb_inplace && ( optind < argc || ! input_xml ) ) {
@@ -314,7 +317,6 @@ int main( int argc, char *argv[] ) {
       fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
       return 1;
     }
-    page.processStart(tool_info);
     if ( gb_image != NULL )
       page.loadImage( 0, gb_image );
 
@@ -332,6 +334,8 @@ int main( int argc, char *argv[] ) {
       images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
     else {
       pixRelease = false;
+      if ( sel.size() > 1 )
+        multipage = true;
       for ( n=0; n<(int)sel.size(); n++ ) {
         NamedImage namedimage;
         namedimage.image = page.getPageImage(sel[n]);
@@ -339,6 +343,41 @@ int main( int argc, char *argv[] ) {
         images.push_back( namedimage );
       }
     }
+  }
+
+  /// Input is tiff image ///
+  else if ( input_tiff ) {
+    /// Read input image ///
+    PIXA* tiffimage = pixaReadMultipageTiff( input_file );
+    if ( tiffimage == NULL || tiffimage->n == 0 ) {
+      fprintf( stderr, "%s: error: problems reading tiff image: %s\n", tool, input_file );
+      return 1;
+    }
+
+    if ( tiffimage->n > 1 )
+      multipage = true;
+
+    for ( n=0; n<tiffimage->n; n++ ) {
+      PageImage image = pixClone(tiffimage->pix[n]);
+
+      NamedImage namedimage;
+      namedimage.image = image;
+
+      std::string image_num(input_file);
+      if ( multipage )
+        image_num += "[" + std::to_string(n+1) + "]";
+
+      /// Initialize Page XML ///
+      if ( n == 0 )
+        namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+      /// Add page to XML ///
+      else
+        namedimage.node = page.addPage( image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+
+      images.push_back( namedimage );
+    }
+
+    pixaDestroy(&tiffimage);
   }
 
   /// Input is image ///
@@ -350,15 +389,13 @@ int main( int argc, char *argv[] ) {
       return 1;
     }
 
-    /// Initialize Page XML ///
-    page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
-    page.processStart(tool_info);
-
     NamedImage namedimage;
     namedimage.image = image;
-    namedimage.node = page.selectNth( "//_:Page", 0 );
+    namedimage.node = page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
     images.push_back( namedimage );
   }
+
+  page.processStart(tool_info);
 
   /// Loop through all images to process ///
   for ( n=0; n<(int)images.size(); n++ ) {
@@ -446,6 +483,8 @@ int main( int argc, char *argv[] ) {
 
         xmlNodePtr xreg = NULL;
         std::string rid = "b" + std::to_string(block);
+        if ( multipage )
+          rid = std::string("page") + std::to_string(1+page.getPageNumber(xpg)) + "_" + rid;
 
         /// If xml input and region selected, set xreg to node ///
         if ( node_level == LEVEL_REGION ) {
@@ -496,7 +535,6 @@ int main( int argc, char *argv[] ) {
             line++;
 
             xmlNodePtr xline = NULL;
-            std::string lid;
 
             /// If xml input and line selected, set xline to node ///
             if ( node_level == LEVEL_LINE )
@@ -504,10 +542,7 @@ int main( int argc, char *argv[] ) {
 
             /// Otherwise add TextLine element ///
             else if ( node_level < LEVEL_LINE ) {
-              lid = "b" + std::to_string(block) + "_p" + std::to_string(para) + "_l" + std::to_string(line);
-              if ( node_level == LEVEL_REGION )
-                lid = rid + "_" + lid;
-
+              std::string lid = rid + "_p" + std::to_string(para) + "_l" + std::to_string(line);
               xline = page.addTextLine( xreg, lid.c_str() );
             }
 
