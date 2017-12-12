@@ -44,6 +44,7 @@ RUN apt-get update --fix-missing \
       tesseract-ocr \
       libxml2 \
       libxslt1.1 \
+      libopencv-core2.4v5 \
       python-flask \
       python-six \
  && apt-get clean \

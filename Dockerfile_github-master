@@ -79,6 +79,7 @@ RUN apt-get update --fix-missing \
  && apt-get install -y --no-install-recommends \
       libxml2 \
       libxslt1.1 \
+      libopencv-core2.4v5 \
       libgomp1 \
       python-flask \
       python-six \
