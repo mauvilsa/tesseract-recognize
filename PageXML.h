@@ -1,7 +1,7 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Version: 2017.12.03$
+ * @version $Version: 2017.12.17$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -172,7 +172,8 @@ class PageXML {
     xmlNodePtr setBaseline( xmlNodePtr node,   const std::vector<cv::Point2f>& points, const double* _conf = NULL );
     xmlNodePtr setBaseline( const char* xpath, const std::vector<cv::Point2f>& points, const double* _conf = NULL );
     xmlNodePtr setBaseline( xmlNodePtr node, double x1, double y1, double x2, double y2, const double* _conf = NULL );
-    xmlNodePtr setPolystripe( xmlNodePtr node, double height, double offset = 0.25 );
+    bool intersection( cv::Point2f line1_point1, cv::Point2f line1_point2, cv::Point2f line2_point1, cv::Point2f line2_point2, cv::Point2f& _ipoint );
+    xmlNodePtr setPolystripe( xmlNodePtr node, double height, double offset = 0.25, bool offset_check = true );
     int getPageNumber( xmlNodePtr node );
     void setPageImageOrientation( xmlNodePtr node, int angle, const double* _conf = NULL );
     void setPageImageOrientation( int pagenum,     int angle, const double* _conf = NULL );

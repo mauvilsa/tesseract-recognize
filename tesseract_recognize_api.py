@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """ API implementation for the tesseract-recognize microservice
-  @version $Version: 2017.10.11$
+  @version $Version: 2017.12.17$
   @author Mauricio Villegas <mauricio_ville@yahoo.com>
   @copyright Copyright(c) 2017-present, Mauricio Villegas <mauricio_ville@yahoo.com>
 """
@@ -49,6 +49,10 @@ def resp500(msg):
 
 ### Definition of endpoints ###
 
+@app.route('/health')
+def health():
+    return 'ok'
+
 @app.route('/tesseract-recognize', methods=['POST'])
 def tesseract_recognize(): # pylint: disable=too-many-return-statements
     """ Endpoint for executing tesseract-recognize on a file """
@@ -68,6 +72,8 @@ def tesseract_recognize(): # pylint: disable=too-many-return-statements
                            for op in data['options']])
 
         if not info_option:
+            # @todo Accept input xml and images from HTTP and output xml in response
+
             ### Check input file ###
             if 'input_file' not in data or \
                not isinstance(data['input_file'], string_types):

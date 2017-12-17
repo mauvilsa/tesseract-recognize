@@ -1,7 +1,7 @@
 /**
- * Tool that does layout anaysis and/or text recognition using tesseract providing results in Page XML format
+ * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.12.03$
+ * @version $Version: 2017.12.17$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -21,7 +21,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.12.03";
+static char version[] = "Version: 2017.12.17";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -153,14 +153,32 @@ void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel it
 }
 
 void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x, int y, tesseract::Orientation orientation ) {
-  // @todo guaranty that baseline+cords form a polystripe
   setCoords( iter, iter_level, page, xelem, x, y, orientation );
+  std::vector<cv::Point2f> coords = page.getPoints( xelem );
   int x1, y1, x2, y2;
   iter->Baseline( iter_level, &x1, &y1, &x2, &y2 );
-  std::vector<cv::Point2f> points = {
-    cv::Point2f(x+x1,y+y1),
-    cv::Point2f(x+x2,y+y2) };
-  page.setBaseline( xelem, points );
+  cv::Point2f b_p1(x+x1,y+y1), b_p2(x+x2,y+y2);
+  cv::Point2f baseline_p1, baseline_p2;
+  if ( ! page.intersection( b_p1, b_p2, coords[0], coords[3], baseline_p1 ) ||
+       ! page.intersection( b_p1, b_p2, coords[1], coords[2], baseline_p2 ) ) {
+    std::string lid;
+    page.getAttr(xelem,"id",lid);
+    fprintf(stderr,"warning: no intersection between baseline and bounding box sides id=%s\n",lid.c_str());
+    std::vector<cv::Point2f> baseline = {
+      cv::Point2f(x+x1,y+y1),
+      cv::Point2f(x+x2,y+y2) };
+    page.setBaseline( xelem, baseline );
+    return;
+  }
+  std::vector<cv::Point2f> baseline = { baseline_p1, baseline_p2 };
+  page.setBaseline( xelem, baseline );
+  double up1 = cv::norm( baseline_p1 - coords[0] );
+  double up2 = cv::norm( baseline_p2 - coords[1] );
+  double down1 = cv::norm( baseline_p1 - coords[3] );
+  double down2 = cv::norm( baseline_p2 - coords[2] );
+  double height = ( up1 < up2 ? up1 : up2 ) + ( down1 < down2 ? down1 : down2 );
+  double offset = ( down1 < down2 ? down1 : down2 ) / height;
+  page.setPolystripe( xelem, height, offset, false );
 }
 
 void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, bool trim = false ) {
@@ -483,17 +501,19 @@ int main( int argc, char *argv[] ) {
 
         xmlNodePtr xreg = NULL;
         std::string rid = "b" + std::to_string(block);
-        if ( multipage )
-          rid = std::string("page") + std::to_string(1+page.getPageNumber(xpg)) + "_" + rid;
 
-        /// If xml input and region selected, set xreg to node ///
+        /// If xml input and region selected, prepend id to rid and set xreg to node ///
         if ( node_level == LEVEL_REGION ) {
-          rid = std::string(images[n].id);
+          rid = std::string(images[n].id) + "_" + rid;
           xreg = node;
         }
 
+        /// If it is multipage, prepend page number to rid ///
+        if ( multipage )
+          rid = std::string("page") + std::to_string(1+page.getPageNumber(xpg)) + "_" + rid;
+
         /// Otherwise add block as TextRegion element ///
-        else if ( node_level < LEVEL_REGION ) {
+        if ( node_level < LEVEL_REGION ) {
           xreg = page.addTextRegion( xpg, rid.c_str() );
 
           /// Set block bounding box and text ///
