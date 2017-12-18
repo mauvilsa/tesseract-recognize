@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.12.17$
+ * @version $Version: 2017.12.18$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -11,6 +11,7 @@
 /*** Includes *****************************************************************/
 #include <algorithm>
 #include <string>
+using std::string;
 #include <regex>
 #include <getopt.h>
 
@@ -21,7 +22,7 @@
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.12.17";
+static char version[] = "Version: 2017.12.18";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
