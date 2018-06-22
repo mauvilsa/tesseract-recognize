@@ -6,6 +6,7 @@ set( tool_EXE tesseract-recognize )
 find_package( PkgConfig )
 pkg_check_modules( lept REQUIRED lept )
 pkg_check_modules( tesseract REQUIRED tesseract )
+pkg_check_modules( Magick REQUIRED Magick++>=6.8 )
 pkg_check_modules( opencv REQUIRED opencv>=2.4 )
 pkg_check_modules( libxml REQUIRED libxml-2.0>=2.9 )
 pkg_check_modules( libxslt REQUIRED libxslt )
@@ -17,14 +18,17 @@ set_property( TARGET ${tool_EXE} PROPERTY CXX_STANDARD 11 )
 include_directories( SYSTEM ${tesseract_INCLUDEDIR} )
 
 add_definitions( -D__PAGEXML_LEPT__ )
+add_definitions( -D__PAGEXML_MAGICK__ )
 
 set( CMAKE_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES};${opencv_INCLUDE_DIRS}" )
 
-string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${lept_CFLAGS} ${tesseract_CFLAGS} ${opencv_CFLAGS} ${libxml_CFLAGS} ${libxslt_CFLAGS}" )
+string( REPLACE ";" " " CFLAGS_STR "-Wall -W ${lept_CFLAGS} ${tesseract_CFLAGS} ${Magick_CFLAGS} ${opencv_CFLAGS} ${libxml_CFLAGS} ${libxslt_CFLAGS}" )
 set_target_properties( ${tool_EXE} PROPERTIES COMPILE_FLAGS "${CFLAGS_STR}" )
 
+include_directories( SYSTEM ${Magick_INCLUDEDIR} ) # To suppress system header warnings
+
 #target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} -lOpenCL )
-target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} ${libxslt_LDFLAGS} )
+target_link_libraries( ${tool_EXE} ${lept_LDFLAGS} ${tesseract_LDFLAGS} ${Magick_LDFLAGS} ${opencv_LDFLAGS} ${libxml_LDFLAGS} ${libxslt_LDFLAGS} )
 
 install( TARGETS ${tool_EXE} DESTINATION bin )
 add_custom_target( install-docker

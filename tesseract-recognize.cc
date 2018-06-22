@@ -162,8 +162,7 @@ void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLeve
   cv::Point2f baseline_p1, baseline_p2;
   if ( ! page.intersection( b_p1, b_p2, coords[0], coords[3], baseline_p1 ) ||
        ! page.intersection( b_p1, b_p2, coords[1], coords[2], baseline_p2 ) ) {
-    std::string lid;
-    page.getAttr(xelem,"id",lid);
+    std::string lid = page.getAttr(xelem,"id");
     fprintf(stderr,"warning: no intersection between baseline and bounding box sides id=%s\n",lid.c_str());
     std::vector<cv::Point2f> baseline = {
       cv::Point2f(x+x1,y+y1),
@@ -529,21 +528,23 @@ int main( int argc, char *argv[] ) {
         tesseract::TextlineOrder textline_order;
         float deskew_angle;
         iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
-        PAGEXML_READ_DIRECTION direct = PAGEXML_READ_DIRECTION_LTR;
-        float orient = 0.0;
-        switch( writing_direction ) {
-          case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: direct = PAGEXML_READ_DIRECTION_LTR; break;
-          case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: direct = PAGEXML_READ_DIRECTION_RTL; break;
-          case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: direct = PAGEXML_READ_DIRECTION_TTB; break;
+        if ( ! input_xml || node_level <= LEVEL_REGION ) {
+          PAGEXML_READ_DIRECTION direct = PAGEXML_READ_DIRECTION_LTR;
+          float orient = 0.0;
+          switch( writing_direction ) {
+            case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: direct = PAGEXML_READ_DIRECTION_LTR; break;
+            case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: direct = PAGEXML_READ_DIRECTION_RTL; break;
+            case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: direct = PAGEXML_READ_DIRECTION_TTB; break;
+          }
+          switch( orientation ) {
+            case tesseract::ORIENTATION_PAGE_UP:    orient = 0.0;   break;
+            case tesseract::ORIENTATION_PAGE_RIGHT: orient = -90.0; break;
+            case tesseract::ORIENTATION_PAGE_LEFT:  orient = 90.0;  break;
+            case tesseract::ORIENTATION_PAGE_DOWN:  orient = 180.0; break;
+          }
+          page.setRotation( xreg, orient );
+          page.setReadingDirection( xreg, direct );
         }
-        switch( orientation ) {
-          case tesseract::ORIENTATION_PAGE_UP:    orient = 0.0;   break;
-          case tesseract::ORIENTATION_PAGE_RIGHT: orient = -90.0; break;
-          case tesseract::ORIENTATION_PAGE_LEFT:  orient = 90.0;  break;
-          case tesseract::ORIENTATION_PAGE_DOWN:  orient = 180.0; break;
-        }
-        page.setRotation( xreg, orient );
-        page.setReadingDirection( xreg, direct );
 
         /// Loop through paragraphs in current block ///
         int para = 0;

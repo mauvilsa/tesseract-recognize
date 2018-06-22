@@ -4,22 +4,52 @@ if ( [ "$#" = 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ] ); then
   echo "
 Command line interface to the tesseract-recognize tool in a docker container.
 It assumes that docker is installed, that it can be executed without sudo and
-that the corresponding image is tagged as tesseract-recognize:active. It will
-only work if the arguments do not contain spaces or special characters
-according to bash and is executed from and referencing only files in the
-host's /Users, /home, /mnt, /media, /opt or /tmp directories.
+that the corresponding image is tagged as tesseract-recognize:active (unless
+overridden by the option -i IMAGE). It will only work if the arguments do not
+contain bash special characters and is executed from and referencing only
+files in the host's /Users, /home, /mnt, /media or /tmp directories.
 ";
-  docker run --rm -t tesseract-recognize:active tesseract-recognize --help
+  docker run --rm -t tesseract-recognize:active tesseract-recognize --help;
   exit 0;
 fi
 
-OPTS=( -u $(id -u):$(id -g) );
-[ -d "/Users" ]  && OPTS+=( -v /Users:/Users );
+IMAGE="tesseract-recognize:active";
+if [ "$1" = "-i" ]; then
+  IMAGE="$2";
+  shift 2;
+fi
+
+CMD=("$@");
+CMD=("${CMD[@]//$'\x27'/$'\x27\x22\x27\x22\x27'}");
+CMD=("${CMD[@]/#/$'\x27'}");
+CMD=("${CMD[@]/%/$'\x27'}");
+
+GID=$(id -G | awk -v dg=$(stat -c "%g" .) '{ id=$1; for(n=2;n<=NF;n++) if($n==dg) id=dg; print id; }');
+
+OPTS=( --user $(id -u):$GID );
+OPTS+=( --rm );
+OPTS+=( --workdir "$(pwd)" );
+OPTS+=( --interactive );
+if ! ( [ "${#CMD[@]}" = 1 ] && [ "${CMD[0]}" = "'bash'" ] ); then
+  OPTS+=( --log-driver none );
+  OPTS+=( --env TERM=xterm-256color );
+fi
+[ -d "/Users" ] && OPTS+=( -v /Users:/Users );
 [ -d "/home" ]  && OPTS+=( -v /home:/home );
 [ -d "/mnt" ]   && OPTS+=( -v /mnt:/mnt );
 [ -d "/media" ] && OPTS+=( -v /media:/media );
-[ -d "/opt" ]   && OPTS+=( -v /opt:/opt );
 [ -d "/tmp" ]   && OPTS+=( -v /tmp:/tmp );
 
-docker run --rm -t "${OPTS[@]}" tesseract-recognize:active \
-  bash -c "cd $(pwd) && tesseract-recognize $*";
+if [ "${#CMD[@]}" = 1 ] && [ "${CMD[0]}" = "'bash'" ]; then
+  TMP=$(mktemp tesseract-recognize.init_XXXXXX);
+  echo "
+    export PS1='\h:\w\$ ';
+    alias ls='ls --color=auto';
+    rm $TMP;
+    " > $TMP;
+  docker run -t "${OPTS[@]}" "$IMAGE" \
+    bash --init-file $TMP;
+else
+  docker run "${OPTS[@]}" "$IMAGE" \
+    bash -c "tesseract-recognize $DPATH${CMD[*]}";
+fi

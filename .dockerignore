@@ -1,4 +1,9 @@
+dockerfiles
 Dockerfile*
 .git
 git*
 *.md
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
