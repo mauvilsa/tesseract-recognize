@@ -19,9 +19,9 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 
 # INSTALLATION AND USAGE (DOCKER)
 
-There are two main docker images that can be chosen from (see the respective [docker hub page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)), one that uses tesseract version 3 available from the default Ubuntu repository and the other that uses the latest version found in the master branch of the [github tesseract repository](https://github.com/tesseract-ocr/tesseract).
+The latest docker images are based on Ubuntu 18.04 and use the version of tesseract from the default package repositories (see the respective [docker hub page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)).
 
-The docker images does not include language files for recognition, so additional to the docker image you need to get the corresponding files and make them accessible to the container. To install first pull the docker image of your choosing, using a command such as:
+The docker images do not include language files for recognition, so additional to the docker image you need to get the corresponding files and make them accessible to the container. To install first pull the docker image of your choosing, using a command such as:
 
     docker pull mauvilsa/tesseract-recognize:TAG
 

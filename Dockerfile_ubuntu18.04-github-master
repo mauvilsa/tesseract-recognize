@@ -12,6 +12,7 @@ COPY . /tmp/tesseract-recognize/
 
 ### Install build pre-requisites ###
 RUN apt-get update --fix-missing \
+ #&& d=$(apt-cache depends libopencv-dev | sed -n '/Depends: libopencv-.*-dev/{ s|.* ||; s|$|-|; p; }' | grep -v libopencv-core-dev | tr '\n' ' ') \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       build-essential \
@@ -26,7 +27,9 @@ RUN apt-get update --fix-missing \
       automake \
       autoconf \
       autoconf-archive \
-      checkinstall \
+      #checkinstall \
+ #&& d=$(apt-cache depends libopencv-dev | sed -n '/Depends: libopencv-.*-dev/{ s|.* ||; p; }' | grep -v libopencv-core-dev | tr '\n' ' ') \
+ && dpkg -r --force-depends libtesseract4 \
 
 
 ### Compile and install latest tesseract from repo ###
@@ -38,8 +41,10 @@ RUN apt-get update --fix-missing \
  #&& v=$(git log --date=iso -1 | sed -n '/^Date:/{s|^Date: *||;s| .*||;s|-|.|g;p;}') \
  #&& sed -i "s|TESSERACT_VERSION_STR .*|TESSERACT_VERSION_STR \"$v\"|" src/api/tess_version.h \
  && make -j$(nproc) \
- && echo "tesseract-ocr" > description-pak \
- && checkinstall -y --pkgname=tesseract-ocr --maintainer=mauricio_ville@yahoo.com --pkgversion=$v --pkgrelease=0 \
+ && make install \
+# && echo "tesseract-ocr" > description-pak \
+## && checkinstall -y --pkgname=tesseract-ocr --maintainer=mauricio_ville@yahoo.com --pkgversion=$v --pkgrelease=0 \
+# && checkinstall -y --pkgname=tesseract-ocr --maintainer=mauricio_ville@yahoo.com --pkgrelease=0 \
 
 
 ### Compile and install tesseract-recognize ###
@@ -51,7 +56,8 @@ RUN apt-get update --fix-missing \
 ### Remove build-only software and install runtime pre-requisites ###
  && cd \
  && rm -rf /tmp/tesseract-recognize /tmp/tesseract \
- && apt-get purge -y \
+ && apt --fix-broken -y install \
+ && apt-get purge -y --fix-broken \
       ca-certificates \
       build-essential \
       cmake \
@@ -65,7 +71,7 @@ RUN apt-get update --fix-missing \
       automake \
       autoconf \
       autoconf-archive \
-      checkinstall \
+      #checkinstall \
  && apt-get autoremove -y \
  && apt-get purge -y $(dpkg -l | awk '{if($1=="rc")print $2}') \
  && apt-get install -y --no-install-recommends \
