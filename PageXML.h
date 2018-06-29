@@ -1,7 +1,7 @@
 /**
  * Header file for the PageXML class
  *
- * @version $Version: 2018.06.22$
+ * @version $Version: 2018.06.29$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -189,6 +189,7 @@ class PageXML {
     void updateLastChange();
     std::string getPropertyValue( xmlNodePt node, const char* key );
     xmlNodePt setProperty( xmlNodePt node, const char* key, const char* val = NULL, const double* _conf = NULL );
+    xmlNodePt setProperty( xmlNodePt node, const char* key, const double val, const double* _conf = NULL );
     xmlNodePt setTextEquiv( xmlNodePt node,   const char* text, const double* _conf = NULL );
     xmlNodePt setTextEquiv( const char* xpath, const char* text, const double* _conf = NULL );
     xmlNodePt setCoords( xmlNodePt node,   const std::vector<cv::Point2f>& points, const double* _conf = NULL );

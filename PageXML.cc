@@ -1,7 +1,7 @@
 /**
  * Class for input, output and processing of Page XML files and referenced image.
  *
- * @version $Version: 2018.06.22$
+ * @version $Version: 2018.06.29$
  * @copyright Copyright (c) 2016-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @license MIT License
  */
@@ -41,15 +41,15 @@ regex reRotation(".*readingOrientation: *([0-9.]+) *;.*");
 regex reDirection(".*readingDirection: *([lrt]t[rlb]) *;.*");
 regex reFileExt("\\.[^.]+$");
 regex reInvalidBaseChars(" ");
-regex reImagePageNum("(^.*)\\[([0-9]+)]$");
-regex reIsPdf(".*\\.pdf(\\[[0-9]+])*$",std::regex::icase);
+regex reImagePageNum("(.*)\\[([0-9]+)\\]$");
+regex reIsPdf(".*\\.pdf(\\[[0-9]+\\])*$",std::regex::icase);
 
 
 /////////////////////
 /// Class version ///
 /////////////////////
 
-static char class_version[] = "Version: 2018.06.22";
+static char class_version[] = "Version: 2018.06.29";
 
 /**
  * Returns the class version.
@@ -1090,12 +1090,15 @@ vector<NamedImage> PageXML::crop( const char* xpath, cv::Point2f* margin, bool o
     Magick::Image cropimg = pageImage;
     try {
       cropimg.crop( Magick::Geometry(cropW,cropH,cropX,cropY) );
-      // @todo If crop partially outside image it will not fail, but fpgram will be wrong?
     }
     catch( exception& error ) {
       fprintf( stderr, "PageXML.crop: error (%s): %s\n", sampname.c_str(), error.what() );
       continue;
     }
+
+    //if( cropimg.columns() != cropW || cropimg.rows() != cropH || cropimg.page().xOff() != cropX || cropimg.page().yOff() != cropY )
+    //  fprintf(stderr,"warning: modified crop for id=%s, requested: %zux%zu+%d+%d vs. obtained: %zux%zu+%ld+%ld\n", sampid.c_str(), cropW,cropH,cropX,cropY, cropimg.columns(),cropimg.rows(),cropimg.page().xOff(),cropimg.page().yOff() );
+
 #elif defined (__PAGEXML_CVIMG__)
     cv::Rect roi;
     roi.x = cropX;
@@ -1984,7 +1987,7 @@ std::string PageXML::getPropertyValue( xmlNodePt node, const char* key ) {
 }
 
 /**
- * Sets a Property for a given xpath.
+ * Sets a Property to a given node.
  *
  * @param node  The node of element to set the Property.
  * @param key   The key for the Property.
@@ -2032,6 +2035,21 @@ xmlNodePt PageXML::setProperty( xmlNodePt node, const char* key, const char* val
   }
 
   return prop;
+}
+
+/**
+ * Sets a Property to a given node.
+ *
+ * @param node  The node of element to set the Property.
+ * @param key   The key for the Property.
+ * @param val   Numeric value for the Property.
+ * @param _conf Pointer to confidence value, NULL for no confidence.
+ * @return      Pointer to created element.
+ */
+xmlNodePt PageXML::setProperty( xmlNodePt node, const char* key, const double val, const double* _conf ) {
+  char buffer[32];
+  snprintf( buffer, sizeof buffer, "%g", val );
+  return setProperty(node,key,buffer,_conf);
 }
 
 /**
@@ -3473,6 +3491,10 @@ int PageXML::copyTextLinesAssignByOverlap( PageXML& pageFrom, PAGEXML_OVERLAP ov
     std::vector<xmlNodePtr> linesAdded;
     std::vector<double> reg_areas;
     for ( int n=0; n<(int)linesFrom.size(); n++ ) {
+      if ( getPoints(linesFrom[n]).size() < 4 ) {
+        fprintf( stderr, "PageXML.copyTextLinesAssignByOverlap: warning: expected Coords to have at least 4 points, skipping copy of id=%s\n", getAttr(linesFrom[n],"id").c_str() );
+        continue;
+      }
       /// Compute overlap scores ///
       std::vector<double> overlap;
       std::vector<double> overlap2;
