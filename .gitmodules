@@ -1,0 +1,3 @@
+[submodule "pagexml"]
+	path = pagexml
+	url = https://github.com/omni-us/pagexml.git

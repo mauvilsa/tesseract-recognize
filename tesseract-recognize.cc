@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2017.12.18$
+ * @version $Version: 2018.10.04$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2017.12.18";
+static char version[] = "Version: 2018.10.04";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -36,6 +36,7 @@ bool gb_textlevels[] = { false, false, false, false };
 bool gb_textatlayout = true;
 char *gb_xpath = gb_default_xpath;
 char *gb_image = NULL;
+int gb_density = 300;
 bool gb_inplace = false;
 
 bool gb_save_crops = false;
@@ -75,6 +76,7 @@ enum {
   OPTION_SAVECROPS        ,
   OPTION_XPATH            ,
   OPTION_IMAGE            ,
+  OPTION_DENSITY          ,
   OPTION_PSM              ,
   OPTION_OEM              ,
   OPTION_INPLACE
@@ -95,6 +97,7 @@ static struct option gb_long_options[] = {
     { "save-crops",   no_argument,       NULL, OPTION_SAVECROPS },
     { "xpath",        required_argument, NULL, OPTION_XPATH },
     { "image",        required_argument, NULL, OPTION_IMAGE },
+    { "density",      required_argument, NULL, OPTION_DENSITY },
     { "inplace",      no_argument,       NULL, OPTION_INPLACE },
     { 0, 0, 0, 0 }
   };
@@ -104,7 +107,7 @@ static struct option gb_long_options[] = {
 
 void print_usage() {
   fprintf( stderr, "Description: Layout analysis and OCR using tesseract providing results in Page XML format\n" );
-  fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE|PAGEXML) [OUTPUT]\n", tool );
+  fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE|PDF|PAGEXML) [OUTPUT_PAGEXML]\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " --lang LANG             Language used for OCR (def.=%s)\n", gb_lang );
   fprintf( stderr, " --tessdata PATH         Location of tessdata (def.=%s)\n", gb_tessdata );
@@ -118,6 +121,7 @@ void print_usage() {
   fprintf( stderr, " --save-crops            Saves cropped images (def.=%s)\n", strbool(gb_save_crops) );
   fprintf( stderr, " --xpath XPATH           xpath for selecting elements to process (def.=%s)\n", gb_xpath );
   fprintf( stderr, " --image IMAGE           Use given image instead of one in Page XML\n" );
+  fprintf( stderr, " --density DENSITY       Density in dpi for pdf rendering (def.=%d)\n", gb_density );
   fprintf( stderr, " --inplace               Overwrite input XML with result (def.=%s)\n", strbool(gb_inplace) );
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
@@ -129,6 +133,12 @@ void print_usage() {
   fprintf( stderr, "\n" );
   r += system( "tesseract --help-oem" );
 #endif
+  fprintf( stderr, "Examples:\n" );
+  fprintf( stderr, "  %s in.png out.xml\n", tool );
+  fprintf( stderr, "  %s in.tiff out.xml  ### TIFF possibly with multiple frames\n", tool );
+  fprintf( stderr, "  %s --density 200 in.pdf out.xml\n", tool );
+  fprintf( stderr, "  %s --xpath //_:Page in.xml out.xml  ### Empty page xml recognize the complete pages\n", tool );
+  fprintf( stderr, "  %s --xpath \"//_:TextRegion[@id='r1']\" --layout-level word --only-layout in.xml out.xml  ### Detect text lines and words only in TextRegion with id=r1\n", tool );
 }
 
 
@@ -254,6 +264,9 @@ int main( int argc, char *argv[] ) {
       case OPTION_IMAGE:
         gb_image = optarg;
         break;
+      case OPTION_DENSITY:
+        gb_density = atoi(optarg);
+        break;
       case OPTION_INPLACE:
         gb_inplace = true;
         break;
@@ -307,11 +320,13 @@ int main( int argc, char *argv[] ) {
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
 
-  std::regex reXml(".+\\.xml$|^-$",std::regex_constants::icase);
-  std::regex reTiff(".+\\.tif{1,2}$|^-$",std::regex_constants::icase);
+  std::regex reIsXml(".+\\.xml$|^-$",std::regex_constants::icase);
+  std::regex reIsTiff(".+\\.tif{1,2}$",std::regex_constants::icase);
+  std::regex reIsPdf(".+\\.pdf$",std::regex_constants::icase);
   std::cmatch base_match;
-  bool input_xml = std::regex_match(input_file,base_match,reXml);
-  bool input_tiff = std::regex_match(input_file,base_match,reTiff);
+  bool input_xml = std::regex_match(input_file,base_match,reIsXml);
+  bool input_tiff = std::regex_match(input_file,base_match,reIsTiff);
+  bool input_pdf = std::regex_match(input_file,base_match,reIsPdf);
   bool multipage = false;
 
   /// Inplace only when one non-option argument and XML input ///
@@ -356,7 +371,12 @@ int main( int argc, char *argv[] ) {
         multipage = true;
       for ( n=0; n<(int)sel.size(); n++ ) {
         NamedImage namedimage;
-        namedimage.image = page.getPageImage(sel[n]);
+        try {
+          namedimage.image = page.getPageImage(sel[n]);
+        } catch ( const std::exception& e ) {
+          fprintf( stderr, "%s: error: problems loading page image %d from xml file: %s\n%s\n", tool, page.getPageNumber(sel[n])+1, input_file, e.what() );
+          return 1;
+        }
         namedimage.node = sel[n];
         images.push_back( namedimage );
       }
@@ -396,6 +416,36 @@ int main( int argc, char *argv[] ) {
     }
 
     pixaDestroy(&tiffimage);
+  }
+
+  /// Input is pdf ///
+  else if ( input_pdf ) {
+    std::list<Magick::Image> pdfpages; 
+    Magick::readImages( &pdfpages, input_file );
+
+    pixRelease = false;
+    if ( pdfpages.size() > 1 )
+      multipage = true;
+
+    n = 0;
+    for ( auto pg = pdfpages.begin(); pg != pdfpages.end(); pg++, n++ ) {
+      std::string pagepath = std::string(input_file)+"["+std::to_string(n+1)+"]";
+      int pagewidth = (int)pg->columns();
+      int pageheight = (int)pg->rows();
+      NamedImage namedimage;
+      if ( n == 0 )
+        namedimage.node = page.newXml( tool_info, pagepath.c_str(), pagewidth, pageheight );
+      else
+        namedimage.node = page.addPage( pagepath.c_str(), pagewidth, pageheight );
+      try {
+        page.loadImage(n, pagepath.c_str(), true, gb_density );
+        namedimage.image = page.getPageImage(n);
+      } catch ( const std::exception& e ) {
+        fprintf( stderr, "%s: error: problems loading page %d from pdf file: %s\n%s\n", tool, n+1, input_file, e.what() );
+        return 1;
+      }
+      images.push_back( namedimage );
+    }
   }
 
   /// Input is image ///
