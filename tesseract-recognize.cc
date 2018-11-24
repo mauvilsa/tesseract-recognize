@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2018.10.04$
+ * @version $Version: 2018.11.24$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2018.10.04";
+static char version[] = "Version: 2018.11.24";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -126,18 +126,19 @@ void print_usage() {
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
   fprintf( stderr, "\n" );
-  int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[012] /d; s|, but no OSD||; s| (Default)||;' 1>&2" );
+  int r = system( "tesseract --help-psm 2>&1 | sed '/^ *[02] /d; s| (Default)||;' 1>&2" );
   if( r != 0 )
     fprintf( stderr, "warning: tesseract command not found in path\n" );
 #if TESSERACT_VERSION >= 0x040000
   fprintf( stderr, "\n" );
-  r += system( "tesseract --help-oem" );
+  r += system( "tesseract --help-oem 1>&2" );
 #endif
   fprintf( stderr, "Examples:\n" );
   fprintf( stderr, "  %s in.png out.xml\n", tool );
   fprintf( stderr, "  %s in.tiff out.xml  ### TIFF possibly with multiple frames\n", tool );
   fprintf( stderr, "  %s --density 200 in.pdf out.xml\n", tool );
   fprintf( stderr, "  %s --xpath //_:Page in.xml out.xml  ### Empty page xml recognize the complete pages\n", tool );
+  fprintf( stderr, "  %s --psm 1 in.png out.xml  ### Detect page orientation pages\n", tool );
   fprintf( stderr, "  %s --xpath \"//_:TextRegion[@id='r1']\" --layout-level word --only-layout in.xml out.xml  ### Detect text lines and words only in TextRegion with id=r1\n", tool );
 }
 
@@ -225,14 +226,20 @@ int main( int argc, char *argv[] ) {
         break;
       case OPTION_PSM:
         gb_psm = atoi(optarg);
-        if( gb_psm < tesseract::PSM_AUTO || gb_psm >= tesseract::PSM_COUNT ) {
+        if( gb_psm < tesseract::PSM_AUTO_OSD || gb_psm == tesseract::PSM_AUTO_ONLY || gb_psm >= tesseract::PSM_COUNT ) {
           fprintf( stderr, "%s: error: invalid page segmentation mode: %s\n", tool, optarg );
           return 1;
         }
         break;
+#if TESSERACT_VERSION >= 0x040000
       case OPTION_OEM:
         gb_oem = atoi(optarg);
+        if( gb_oem < tesseract::OEM_TESSERACT_ONLY || gb_oem >= tesseract::OEM_COUNT ) {
+          fprintf( stderr, "%s: error: invalid OCR engine mode: %s\n", tool, optarg );
+          return 1;
+        }
         break;
+#endif
       case OPTION_LAYOUTLEVEL:
         gb_layoutlevel = parseLevel(optarg);
         if( gb_layoutlevel == -1 ) {
@@ -300,7 +307,7 @@ int main( int argc, char *argv[] ) {
   /// Initialize tesseract just for layout or with given language and tessdata path///
   tesseract::TessBaseAPI *tessApi = new tesseract::TessBaseAPI();
 
-  if ( gb_onlylayout )
+  if ( gb_onlylayout && gb_psm != tesseract::PSM_AUTO_OSD )
     tessApi->InitForAnalysePage();
   else
 #if TESSERACT_VERSION >= 0x040000
@@ -350,8 +357,18 @@ int main( int argc, char *argv[] ) {
       fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
       return 1;
     }
-    if ( gb_image != NULL )
+    if ( gb_image != NULL ) {
+      if ( page.count("//_:Page") > 1 ) {
+        fprintf( stderr, "%s: error: specifying image with multipage xml input not supported\n", tool );
+        return 1;
+      }
       page.loadImage( 0, gb_image );
+    }
+
+    if ( gb_psm == tesseract::PSM_AUTO_OSD && page.count("//_:ImageOrientation") > 0 ) {
+      fprintf( stderr, "%s: error: refusing to use OSD on page xml that already contains ImageOrientation elements\n", tool );
+      return 1;
+    }
 
     std::vector<xmlNodePtr> sel = page.select(gb_xpath);
     int selPages = 0;
@@ -510,13 +527,41 @@ int main( int argc, char *argv[] ) {
     }
 
     /// Perform layout analysis ///
-    if ( gb_onlylayout )
+    if ( gb_onlylayout && gb_psm != tesseract::PSM_AUTO_OSD )
       iter = (tesseract::ResultIterator*)( tessApi->AnalyseLayout() );
 
     /// Perform recognition ///
     else {
       tessApi->Recognize( 0 );
       iter = tessApi->GetIterator();
+    }
+
+    /// Orientation and Script Detection ///
+    tesseract::Orientation orientation;
+    tesseract::WritingDirection writing_direction;
+    tesseract::TextlineOrder textline_order;
+    float deskew_angle;
+    iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
+
+    if ( gb_psm == tesseract::PSM_AUTO_OSD ) {
+      if ( deskew_angle != 0.0 )
+        page.setProperty( xpg, "deskewAngle", deskew_angle );
+      switch ( orientation ) {
+        case tesseract::ORIENTATION_PAGE_RIGHT:          page.setProperty( xpg, "apply-image-orientation", -90 );      break;
+        case tesseract::ORIENTATION_PAGE_LEFT:           page.setProperty( xpg, "apply-image-orientation", 90 );       break;
+        case tesseract::ORIENTATION_PAGE_DOWN:           page.setProperty( xpg, "apply-image-orientation", 180 );      break;
+        default: break;
+      }
+      switch ( writing_direction ) {
+        case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: page.setProperty( xpg, "readingDirection", "left-to-right" ); break;
+        case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: page.setProperty( xpg, "readingDirection", "right-to-left" ); break;
+        case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: page.setProperty( xpg, "readingDirection", "top-to-bottom" ); break;
+      }
+      switch ( textline_order ) {
+        case tesseract::TEXTLINE_ORDER_LEFT_TO_RIGHT:    page.setProperty( xpg, "textLineOrder", "left-to-right" );    break;
+        case tesseract::TEXTLINE_ORDER_RIGHT_TO_LEFT:    page.setProperty( xpg, "textLineOrder", "right-to-left" );    break;
+        case tesseract::TEXTLINE_ORDER_TOP_TO_BOTTOM:    page.setProperty( xpg, "textLineOrder", "top-to-bottom" );    break;
+      }
     }
 
     /// Loop through blocks ///
@@ -573,27 +618,29 @@ int main( int argc, char *argv[] ) {
         }
 
         /// Set rotation and reading direction ///
-        tesseract::Orientation orientation;
+        /*tesseract::Orientation orientation;
         tesseract::WritingDirection writing_direction;
         tesseract::TextlineOrder textline_order;
-        float deskew_angle;
+        float deskew_angle;*/
         iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
         if ( ! input_xml || node_level <= LEVEL_REGION ) {
+          if ( deskew_angle != 0.0 )
+            page.setProperty( xpg, "deskewAngle", deskew_angle );
           PAGEXML_READ_DIRECTION direct = PAGEXML_READ_DIRECTION_LTR;
-          float orient = 0.0;
           switch( writing_direction ) {
             case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: direct = PAGEXML_READ_DIRECTION_LTR; break;
             case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: direct = PAGEXML_READ_DIRECTION_RTL; break;
             case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: direct = PAGEXML_READ_DIRECTION_TTB; break;
           }
+          page.setReadingDirection( xreg, direct );
+          /*float orient = 0.0;
           switch( orientation ) {
             case tesseract::ORIENTATION_PAGE_UP:    orient = 0.0;   break;
             case tesseract::ORIENTATION_PAGE_RIGHT: orient = -90.0; break;
             case tesseract::ORIENTATION_PAGE_LEFT:  orient = 90.0;  break;
             case tesseract::ORIENTATION_PAGE_DOWN:  orient = 180.0; break;
           }
-          page.setRotation( xreg, orient );
-          page.setReadingDirection( xreg, direct );
+          page.setRotation( xreg, orient );*/
         }
 
         /// Loop through paragraphs in current block ///
@@ -679,6 +726,14 @@ int main( int argc, char *argv[] ) {
       } // while ( gb_layoutlevel >= LEVEL_REGION ) {
 
   } // for ( n=0; n<(int)images.size(); n++ ) {
+
+  /// Apply image orientations ///
+  std::vector<xmlNodePtr> sel = page.select("//_:Page[_:Property/@key='apply-image-orientation']");
+  for ( n=(int)sel.size()-1; n>=0; n-- ) {
+    int angle = atoi( page.getPropertyValue( sel[n], "apply-image-orientation" ).c_str() );
+    page.rotatePage( -angle, sel[n], true );
+    page.rmElems( page.select("_:Property[@key='apply-image-orientation']", sel[n]) );
+  }
 
   /// Try to make imageFilename be a relative path w.r.t. the output XML ///
   if ( ! input_xml && ! gb_inplace && optind < argc )
