@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2018.11.24$
+ * @version $Version: 2018.12.15$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,11 +22,13 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2018.11.24";
+static char version[] = "Version: 2018.12.15";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
+char gb_default_output[] = "-";
 
+char *gb_output = gb_default_output;
 char *gb_lang = gb_default_lang;
 char *gb_tessdata = NULL;
 int gb_psm = tesseract::PSM_AUTO;
@@ -66,6 +68,7 @@ inline static int parseLevel( const char* level ) {
 int gb_layoutlevel = LEVEL_LINE;
 
 enum {
+  OPTION_OUTPUT      = 'o',
   OPTION_HELP        = 'h',
   OPTION_VERSION     = 'v',
   OPTION_TESSDATA    = 256,
@@ -82,9 +85,10 @@ enum {
   OPTION_INPLACE
 };
 
-static char gb_short_options[] = "hv";
+static char gb_short_options[] = "o:hv";
 
 static struct option gb_long_options[] = {
+    { "output",       required_argument, NULL, OPTION_OUTPUT },
     { "help",         no_argument,       NULL, OPTION_HELP },
     { "version",      no_argument,       NULL, OPTION_VERSION },
     { "tessdata",     required_argument, NULL, OPTION_TESSDATA },
@@ -107,7 +111,7 @@ static struct option gb_long_options[] = {
 
 void print_usage() {
   fprintf( stderr, "Description: Layout analysis and OCR using tesseract providing results in Page XML format\n" );
-  fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE|PDF|PAGEXML) [OUTPUT_PAGEXML]\n", tool );
+  fprintf( stderr, "Usage: %s [OPTIONS] (IMAGE+|PDF+|PAGEXML)\n", tool );
   fprintf( stderr, "Options:\n" );
   fprintf( stderr, " --lang LANG             Language used for OCR (def.=%s)\n", gb_lang );
   fprintf( stderr, " --tessdata PATH         Location of tessdata (def.=%s)\n", gb_tessdata );
@@ -123,6 +127,7 @@ void print_usage() {
   fprintf( stderr, " --image IMAGE           Use given image instead of one in Page XML\n" );
   fprintf( stderr, " --density DENSITY       Density in dpi for pdf rendering (def.=%d)\n", gb_density );
   fprintf( stderr, " --inplace               Overwrite input XML with result (def.=%s)\n", strbool(gb_inplace) );
+  fprintf( stderr, " -o, --output            Output page xml file (def.=%s)\n", gb_output );
   fprintf( stderr, " -h, --help              Print this usage information and exit\n" );
   fprintf( stderr, " -v, --version           Print version and exit\n" );
   fprintf( stderr, "\n" );
@@ -134,12 +139,12 @@ void print_usage() {
   r += system( "tesseract --help-oem 1>&2" );
 #endif
   fprintf( stderr, "Examples:\n" );
-  fprintf( stderr, "  %s in.png out.xml\n", tool );
-  fprintf( stderr, "  %s in.tiff out.xml  ### TIFF possibly with multiple frames\n", tool );
-  fprintf( stderr, "  %s --density 200 in.pdf out.xml\n", tool );
-  fprintf( stderr, "  %s --xpath //_:Page in.xml out.xml  ### Empty page xml recognize the complete pages\n", tool );
-  fprintf( stderr, "  %s --psm 1 in.png out.xml  ### Detect page orientation pages\n", tool );
-  fprintf( stderr, "  %s --xpath \"//_:TextRegion[@id='r1']\" --layout-level word --only-layout in.xml out.xml  ### Detect text lines and words only in TextRegion with id=r1\n", tool );
+  fprintf( stderr, "  %s -o out.xml in1.png in2.png  ### Multiple images as input\n", tool );
+  fprintf( stderr, "  %s -o out.xml in.tiff  ### TIFF possibly with multiple frames\n", tool );
+  fprintf( stderr, "  %s -o out.xml --density 200 in.pdf\n", tool );
+  fprintf( stderr, "  %s -o out.xml --xpath //_:Page in.xml  ### Empty page xml recognize the complete pages\n", tool );
+  fprintf( stderr, "  %s -o out.xml --psm 1 in.png  ### Detect page orientation pages\n", tool );
+  fprintf( stderr, "  %s -o out.xml --xpath \"//_:TextRegion[@id='r1']\" --layout-level word --only-layout in.xml  ### Detect text lines and words only in TextRegion with id=r1\n", tool );
 }
 
 
@@ -277,6 +282,9 @@ int main( int argc, char *argv[] ) {
       case OPTION_INPLACE:
         gb_inplace = true;
         break;
+      case OPTION_OUTPUT:
+        gb_output = optarg;
+        break;
       case OPTION_HELP:
         print_usage();
         return 0;
@@ -298,9 +306,9 @@ int main( int argc, char *argv[] ) {
   if ( gb_textatlayout )
     gb_textlevels[gb_layoutlevel] = true;
 
-  /// Check that there is at least one and at most two non-option arguments ///
-  if ( optind >= argc || argc - optind > 2 ) {
-    fprintf( stderr, "%s: error: incorrect input arguments, see usage with --help\n", tool );
+  /// Check that there is at least one non-option argument ///
+  if ( optind >= argc ) {
+    fprintf( stderr, "%s: error: at least one input file must be provided, see usage with --help\n", tool );
     return 1;
   }
 
@@ -321,9 +329,9 @@ int main( int argc, char *argv[] ) {
 
   tessApi->SetPageSegMode( (tesseract::PageSegMode)gb_psm );
 
-  char *input_file = argv[optind++];
   PageXML page;
-  bool pixRelease = true;
+  int num_pages = 0;
+  bool pixRelease = false;
   std::vector<NamedImage> images;
   tesseract::ResultIterator* iter = NULL;
 
@@ -331,14 +339,12 @@ int main( int argc, char *argv[] ) {
   std::regex reIsTiff(".+\\.tif{1,2}$",std::regex_constants::icase);
   std::regex reIsPdf(".+\\.pdf$",std::regex_constants::icase);
   std::cmatch base_match;
+  char *input_file = argv[optind];
   bool input_xml = std::regex_match(input_file,base_match,reIsXml);
-  bool input_tiff = std::regex_match(input_file,base_match,reIsTiff);
-  bool input_pdf = std::regex_match(input_file,base_match,reIsPdf);
-  bool multipage = false;
 
-  /// Inplace only when one non-option argument and XML input ///
-  if ( gb_inplace && ( optind < argc || ! input_xml ) ) {
-    fprintf( stderr, "%s: warning: ignoring --inplace option\n", tool );
+  /// Inplace only when XML input and output not specified ///
+  if ( gb_inplace && ( ! input_xml || strcmp(gb_output,"-") ) ) {
+    fprintf( stderr, "%s: warning: ignoring --inplace option, output to %s\n", tool, gb_output );
     gb_inplace = false;
   }
 
@@ -349,135 +355,135 @@ int main( int argc, char *argv[] ) {
   else
     snprintf( tool_info, sizeof tool_info, "%s_v%.10s tesseract_v%s lang=%s", tool, version+9, tesseract::TessBaseAPI::Version(), gb_lang );
 
-  /// Input is xml ///
-  if ( input_xml ) {
-    try {
-      page.loadXml( input_file ); // if input_file is "-" xml is read from stdin
-    } catch ( const std::exception& e ) {
-      fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
-      return 1;
-    }
-    if ( gb_image != NULL ) {
-      if ( page.count("//_:Page") > 1 ) {
-        fprintf( stderr, "%s: error: specifying image with multipage xml input not supported\n", tool );
+  /// Loop through input files ///
+  for ( ; optind < argc; optind++ ) {
+    input_file = argv[optind];
+    input_xml = std::regex_match(input_file,base_match,reIsXml);
+    bool input_tiff = std::regex_match(input_file,base_match,reIsTiff);
+    bool input_pdf = std::regex_match(input_file,base_match,reIsPdf);
+
+    /// Input is xml ///
+    if ( input_xml ) {
+      if ( num_pages > 0 ) {
+        fprintf( stderr, "%s: error: only a single page xml allowed as input\n", tool );
         return 1;
       }
-      page.loadImage( 0, gb_image );
-    }
-
-    if ( gb_psm == tesseract::PSM_AUTO_OSD && page.count("//_:ImageOrientation") > 0 ) {
-      fprintf( stderr, "%s: error: refusing to use OSD on page xml that already contains ImageOrientation elements\n", tool );
-      return 1;
-    }
-
-    std::vector<xmlNodePtr> sel = page.select(gb_xpath);
-    int selPages = 0;
-    for ( n=0; n<(int)sel.size(); n++ )
-      if ( page.nodeIs( sel[n], "Page" ) )
-        selPages++;
-    if ( selPages > 0 && selPages != (int)sel.size() ) {
-      fprintf( stderr, "%s: error: xpath can select Page or non-Page elements but not a mixture of both: %s\n", tool, gb_xpath );
-      return 1;
-    }
-
-    if ( selPages == 0 )
-      images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
-    else {
-      pixRelease = false;
-      if ( sel.size() > 1 )
-        multipage = true;
-      for ( n=0; n<(int)sel.size(); n++ ) {
-        NamedImage namedimage;
-        try {
-          namedimage.image = page.getPageImage(sel[n]);
-        } catch ( const std::exception& e ) {
-          fprintf( stderr, "%s: error: problems loading page image %d from xml file: %s\n%s\n", tool, page.getPageNumber(sel[n])+1, input_file, e.what() );
+      try {
+        page.loadXml( input_file ); // if input_file is "-" xml is read from stdin
+      } catch ( const std::exception& e ) {
+        fprintf( stderr, "%s: error: problems reading xml file: %s\n%s\n", tool, input_file, e.what() );
+        return 1;
+      }
+      if ( gb_image != NULL ) {
+        if ( page.count("//_:Page") > 1 ) {
+          fprintf( stderr, "%s: error: specifying image with multipage xml input not supported\n", tool );
           return 1;
         }
-        namedimage.node = sel[n];
-        images.push_back( namedimage );
+        page.loadImage( 0, gb_image );
       }
-    }
-  }
+      num_pages += page.count("//_:Page");
 
-  /// Input is tiff image ///
-  else if ( input_tiff ) {
-    /// Read input image ///
-    PIXA* tiffimage = pixaReadMultipageTiff( input_file );
-    if ( tiffimage == NULL || tiffimage->n == 0 ) {
-      fprintf( stderr, "%s: error: problems reading tiff image: %s\n", tool, input_file );
-      return 1;
-    }
-
-    if ( tiffimage->n > 1 )
-      multipage = true;
-
-    for ( n=0; n<tiffimage->n; n++ ) {
-      PageImage image = pixClone(tiffimage->pix[n]);
-
-      NamedImage namedimage;
-      namedimage.image = image;
-
-      std::string image_num(input_file);
-      if ( multipage )
-        image_num += "[" + std::to_string(n+1) + "]";
-
-      /// Initialize Page XML ///
-      if ( n == 0 )
-        namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
-      /// Add page to XML ///
-      else
-        namedimage.node = page.addPage( image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
-
-      images.push_back( namedimage );
-    }
-
-    pixaDestroy(&tiffimage);
-  }
-
-  /// Input is pdf ///
-  else if ( input_pdf ) {
-    std::list<Magick::Image> pdfpages; 
-    Magick::readImages( &pdfpages, input_file );
-
-    pixRelease = false;
-    if ( pdfpages.size() > 1 )
-      multipage = true;
-
-    n = 0;
-    for ( auto pg = pdfpages.begin(); pg != pdfpages.end(); pg++, n++ ) {
-      std::string pagepath = std::string(input_file)+"["+std::to_string(n+1)+"]";
-      int pagewidth = (int)pg->columns();
-      int pageheight = (int)pg->rows();
-      NamedImage namedimage;
-      if ( n == 0 )
-        namedimage.node = page.newXml( tool_info, pagepath.c_str(), pagewidth, pageheight );
-      else
-        namedimage.node = page.addPage( pagepath.c_str(), pagewidth, pageheight );
-      try {
-        page.loadImage(n, pagepath.c_str(), true, gb_density );
-        namedimage.image = page.getPageImage(n);
-      } catch ( const std::exception& e ) {
-        fprintf( stderr, "%s: error: problems loading page %d from pdf file: %s\n%s\n", tool, n+1, input_file, e.what() );
+      if ( gb_psm == tesseract::PSM_AUTO_OSD && page.count("//_:ImageOrientation") > 0 ) {
+        fprintf( stderr, "%s: error: refusing to use OSD on page xml that already contains ImageOrientation elements\n", tool );
         return 1;
       }
+
+      std::vector<xmlNodePtr> sel = page.select(gb_xpath);
+      int selPages = 0;
+      for ( n=0; n<(int)sel.size(); n++ )
+        if ( page.nodeIs( sel[n], "Page" ) )
+          selPages++;
+      if ( selPages > 0 && selPages != (int)sel.size() ) {
+        fprintf( stderr, "%s: error: xpath can select Page or non-Page elements but not a mixture of both: %s\n", tool, gb_xpath );
+        return 1;
+      }
+
+      if ( selPages == 0 ) {
+        pixRelease = true;
+        images = page.crop( (std::string(gb_xpath)+"/_:Coords").c_str(), NULL, false );
+        page.releaseImages();
+      }
+      else {
+        for ( n=0; n<(int)sel.size(); n++ ) {
+          NamedImage namedimage;
+          namedimage.image = NULL;
+          namedimage.node = sel[n];
+          images.push_back( namedimage );
+          num_pages++;
+        }
+      }
+    }
+
+    /// Input is tiff image ///
+    else if ( input_tiff ) {
+      pixRelease = true;
+
+      /// Read input image ///
+      PIXA* tiffimage = pixaReadMultipageTiff( input_file );
+      if ( tiffimage == NULL || tiffimage->n == 0 ) {
+        fprintf( stderr, "%s: error: problems reading tiff image: %s\n", tool, input_file );
+        return 1;
+      }
+
+      for ( n=0; n<tiffimage->n; n++ ) {
+        PageImage image = pixClone(tiffimage->pix[n]);
+
+        NamedImage namedimage;
+        namedimage.image = image;
+
+        std::string image_num(input_file);
+        if ( tiffimage->n > 1 )
+          image_num += "[" + std::to_string(n+1) + "]";
+
+        if ( num_pages == 0 )
+          namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+        else
+          namedimage.node = page.addPage( image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+        images.push_back( namedimage );
+        num_pages++;
+      }
+
+      pixaDestroy(&tiffimage);
+    }
+
+    /// Input is pdf ///
+    else if ( input_pdf ) {
+      std::list<Magick::Image> pdfpages; 
+      Magick::readImages( &pdfpages, input_file );
+
+      n = 0;
+      for ( auto pg = pdfpages.begin(); pg != pdfpages.end(); pg++, n++ ) {
+        std::string pagepath = std::string(input_file)+"["+std::to_string(n+1)+"]";
+        NamedImage namedimage;
+        namedimage.image = NULL;
+        if ( num_pages == 0 )
+          namedimage.node = page.newXml( tool_info, pagepath.c_str(), (int)pg->columns(), (int)pg->rows() );
+        else
+          namedimage.node = page.addPage( pagepath.c_str(), (int)pg->columns(), (int)pg->rows() );
+        images.push_back( namedimage );
+        num_pages++;
+      }
+    }
+
+    /// Input is image ///
+    else {
+      /// Read input image ///
+      PageImage image = pixRead( input_file );
+      if ( image == NULL ) {
+        fprintf( stderr, "%s: error: problems reading image: %s\n", tool, input_file );
+        return 1;
+      }
+
+      NamedImage namedimage;
+      namedimage.image = NULL;
+      if ( num_pages == 0 )
+        namedimage.node = page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
+      else
+        namedimage.node = page.addPage( input_file, pixGetWidth(image), pixGetHeight(image) );
+      num_pages++;
+      pixDestroy(&image);
       images.push_back( namedimage );
     }
-  }
-
-  /// Input is image ///
-  else {
-    /// Read input image ///
-    PageImage image = pixRead( input_file );
-    if ( image == NULL ) {
-      fprintf( stderr, "%s: error: problems reading image: %s\n", tool, input_file );
-      return 1;
-    }
-
-    NamedImage namedimage;
-    namedimage.image = image;
-    namedimage.node = page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
-    images.push_back( namedimage );
   }
 
   page.processStart(tool_info);
@@ -485,6 +491,17 @@ int main( int argc, char *argv[] ) {
   /// Loop through all images to process ///
   for ( n=0; n<(int)images.size(); n++ ) {
     xmlNodePtr xpg = page.closest( "Page", images[n].node );
+
+    if ( images[n].image == NULL ) {
+      try {
+        page.loadImage(xpg, NULL, true, gb_density );
+        images[n].image = page.getPageImage(n);
+      } catch ( const std::exception& e ) {
+        fprintf( stderr, "%s: error: problems loading page image: %s\n", tool, page.getPageImageFilename(n).c_str() );
+        return 1;
+      }
+    }
+
     tessApi->SetImage( images[n].image );
     if ( gb_save_crops && input_xml ) {
       std::string fout = std::string("crop_")+std::to_string(n)+"_"+images[n].id+".png";
@@ -536,37 +553,37 @@ int main( int argc, char *argv[] ) {
       iter = tessApi->GetIterator();
     }
 
-    /// Orientation and Script Detection ///
-    tesseract::Orientation orientation;
-    tesseract::WritingDirection writing_direction;
-    tesseract::TextlineOrder textline_order;
-    float deskew_angle;
-    iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
+    if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) ) {
+      /// Orientation and Script Detection ///
+      tesseract::Orientation orientation;
+      tesseract::WritingDirection writing_direction;
+      tesseract::TextlineOrder textline_order;
+      float deskew_angle;
+      iter->Orientation( &orientation, &writing_direction, &textline_order, &deskew_angle );
 
-    if ( gb_psm == tesseract::PSM_AUTO_OSD ) {
-      if ( deskew_angle != 0.0 )
-        page.setProperty( xpg, "deskewAngle", deskew_angle );
-      switch ( orientation ) {
-        case tesseract::ORIENTATION_PAGE_RIGHT:          page.setProperty( xpg, "apply-image-orientation", -90 );      break;
-        case tesseract::ORIENTATION_PAGE_LEFT:           page.setProperty( xpg, "apply-image-orientation", 90 );       break;
-        case tesseract::ORIENTATION_PAGE_DOWN:           page.setProperty( xpg, "apply-image-orientation", 180 );      break;
-        default: break;
+      if ( gb_psm == tesseract::PSM_AUTO_OSD ) {
+        if ( deskew_angle != 0.0 )
+          page.setProperty( xpg, "deskewAngle", deskew_angle );
+        switch ( orientation ) {
+          case tesseract::ORIENTATION_PAGE_RIGHT:          page.setProperty( xpg, "apply-image-orientation", -90 );      break;
+          case tesseract::ORIENTATION_PAGE_LEFT:           page.setProperty( xpg, "apply-image-orientation", 90 );       break;
+          case tesseract::ORIENTATION_PAGE_DOWN:           page.setProperty( xpg, "apply-image-orientation", 180 );      break;
+          default: break;
+        }
+        switch ( writing_direction ) {
+          case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: page.setProperty( xpg, "readingDirection", "left-to-right" ); break;
+          case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: page.setProperty( xpg, "readingDirection", "right-to-left" ); break;
+          case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: page.setProperty( xpg, "readingDirection", "top-to-bottom" ); break;
+        }
+        switch ( textline_order ) {
+          case tesseract::TEXTLINE_ORDER_LEFT_TO_RIGHT:    page.setProperty( xpg, "textLineOrder", "left-to-right" );    break;
+          case tesseract::TEXTLINE_ORDER_RIGHT_TO_LEFT:    page.setProperty( xpg, "textLineOrder", "right-to-left" );    break;
+          case tesseract::TEXTLINE_ORDER_TOP_TO_BOTTOM:    page.setProperty( xpg, "textLineOrder", "top-to-bottom" );    break;
+        }
       }
-      switch ( writing_direction ) {
-        case tesseract::WRITING_DIRECTION_LEFT_TO_RIGHT: page.setProperty( xpg, "readingDirection", "left-to-right" ); break;
-        case tesseract::WRITING_DIRECTION_RIGHT_TO_LEFT: page.setProperty( xpg, "readingDirection", "right-to-left" ); break;
-        case tesseract::WRITING_DIRECTION_TOP_TO_BOTTOM: page.setProperty( xpg, "readingDirection", "top-to-bottom" ); break;
-      }
-      switch ( textline_order ) {
-        case tesseract::TEXTLINE_ORDER_LEFT_TO_RIGHT:    page.setProperty( xpg, "textLineOrder", "left-to-right" );    break;
-        case tesseract::TEXTLINE_ORDER_RIGHT_TO_LEFT:    page.setProperty( xpg, "textLineOrder", "right-to-left" );    break;
-        case tesseract::TEXTLINE_ORDER_TOP_TO_BOTTOM:    page.setProperty( xpg, "textLineOrder", "top-to-bottom" );    break;
-      }
-    }
 
-    /// Loop through blocks ///
-    int block = 0;
-    if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) )
+      /// Loop through blocks ///
+      int block = 0;
       while ( gb_layoutlevel >= LEVEL_REGION ) {
         /// Skip non-text blocks ///
         /*
@@ -604,8 +621,8 @@ int main( int argc, char *argv[] ) {
         }
 
         /// If it is multipage, prepend page number to rid ///
-        if ( multipage )
-          rid = std::string("page") + std::to_string(1+page.getPageNumber(xpg)) + "_" + rid;
+        if ( num_pages > 1 )
+          rid = std::string("pg") + std::to_string(1+page.getPageNumber(xpg)) + "_" + rid;
 
         /// Otherwise add block as TextRegion element ///
         if ( node_level < LEVEL_REGION ) {
@@ -724,7 +741,8 @@ int main( int argc, char *argv[] ) {
         if ( ! iter->Next( tesseract::RIL_BLOCK ) )
           break;
       } // while ( gb_layoutlevel >= LEVEL_REGION ) {
-
+    } // if ( iter != NULL && ! iter->Empty( tesseract::RIL_BLOCK ) ) {
+    page.releaseImage(xpg);
   } // for ( n=0; n<(int)images.size(); n++ ) {
 
   /// Apply image orientations ///
@@ -736,11 +754,11 @@ int main( int argc, char *argv[] ) {
   }
 
   /// Try to make imageFilename be a relative path w.r.t. the output XML ///
-  if ( ! input_xml && ! gb_inplace && optind < argc )
-    page.relativizeImageFilename(argv[optind]);
+  if ( ! input_xml && ! gb_inplace && strcmp(gb_output,"-") )
+    page.relativizeImageFilename(gb_output);
 
   /// Write resulting XML ///
-  int bytes = page.write( gb_inplace ? input_file : optind < argc ? argv[optind] : "-" );
+  int bytes = page.write( gb_inplace ? input_file : gb_output );
   if ( bytes <= 0 )
     fprintf( stderr, "%s: error: problems writing to output xml\n", tool );
 
