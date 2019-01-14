@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2018.12.15$
+ * @version $Version: 2019.01.14$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2018.12.15";
+static char version[] = "Version: 2019.01.14";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -749,8 +749,23 @@ int main( int argc, char *argv[] ) {
   std::vector<xmlNodePtr> sel = page.select("//_:Page[_:Property/@key='apply-image-orientation']");
   for ( n=(int)sel.size()-1; n>=0; n-- ) {
     int angle = atoi( page.getPropertyValue( sel[n], "apply-image-orientation" ).c_str() );
-    page.rotatePage( -angle, sel[n], true );
+    if ( angle )
+      page.rotatePage( -angle, sel[n], true );
     page.rmElems( page.select("_:Property[@key='apply-image-orientation']", sel[n]) );
+    std::vector<xmlNodePtr> lines = page.select(".//_:TextLine",sel[n]);
+    /// Fix image orientation using baselines ///
+    if ( lines.size() > 0 ) {
+      double domangle = page.getDominantBaselinesOrientation(lines);
+      angle = 0;
+      if ( domangle >= M_PI/4 && domangle < 3*M_PI/4 )
+        angle = -90;
+      else if ( domangle <= -M_PI/4 && domangle > -3*M_PI/4 )
+        angle = 90;
+      else if ( domangle >= 3*M_PI/4 || domangle <= -3*M_PI/4 )
+        angle = 180;
+      if ( angle )
+        page.rotatePage(angle, sel[n], true);
+    }
   }
 
   /// Try to make imageFilename be a relative path w.r.t. the output XML ///
