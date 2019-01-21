@@ -52,8 +52,8 @@ RUN apt-get update --fix-missing \
       python-flask \
       python-six \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
-
+ && rm -rf /var/lib/apt/lists/* \
+ && sed '/<policy domain="coder"/d' -i /etc/ImageMagick-6/policy.xml
 
 ### By default start the flask API server ###
 CMD ["/usr/bin/python","/usr/local/bin/tesseract_recognize_api.py"]
