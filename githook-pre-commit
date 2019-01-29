@@ -43,7 +43,7 @@ n=1;
 while [ "$n" -lt "${#FILES[@]}" ]; do
   case "${FILES[$n]}" in
     tesseract-recognize.cc | *.py )
-      check_change_after_staged "${FILES[$n]}" "${FILES[$((n+1))]}";
+      check_change_after_staged "${FILES[$n]}" "${FILES[$((n-1))]}";
       update_file_version "${FILES[$n]}";
       ;;
   esac
