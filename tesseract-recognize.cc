@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.01.14$
+ * @version $Version: 2019.02.07$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.01.14";
+static char version[] = "Version: 2019.02.07";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -194,7 +194,7 @@ void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLeve
   double down2 = cv::norm( baseline_p2 - coords[2] );
   double height = ( up1 < up2 ? up1 : up2 ) + ( down1 < down2 ? down1 : down2 );
   double offset = ( down1 < down2 ? down1 : down2 ) / height;
-  page.setPolystripe( xelem, height, offset, false );
+  page.setPolystripe( xelem, height <= 0.0 ? 1.0 : height, offset, false );
 }
 
 void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, bool trim = false ) {
