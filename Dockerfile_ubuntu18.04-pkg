@@ -5,6 +5,22 @@ MAINTAINER Mauricio Villegas <mauricio_ville@yahoo.com>
 ENV DEBIAN_FRONTEND=noninteractive
 
 
+### Install runtime requirements ###
+RUN apt-get update --fix-missing \
+ && apt-get install -y --no-install-recommends \
+      tesseract-ocr \
+      ghostscript \
+      libxml2 \
+      libxslt1.1 \
+      libopencv-core3.2 \
+      libmagick++-6.q16-7 \
+      python-flask \
+      python-six \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && sed '/<policy domain="coder"/d' -i /etc/ImageMagick-6/policy.xml
+
+
 ### Copy the source code to a temporal directory ###
 COPY . /tmp/tesseract-recognize/
 
@@ -28,7 +44,7 @@ RUN apt-get update --fix-missing \
  && make install install-docker \
 
 
-### Remove build-only software and install runtime pre-requisites ###
+### Remove build-only software ###
  && cd \
  && rm -rf /tmp/tesseract-recognize \
  && apt-get purge -y \
@@ -42,18 +58,9 @@ RUN apt-get update --fix-missing \
       libmagick++-dev \
  && apt-get autoremove -y \
  && apt-get purge -y $(dpkg -l | awk '{if($1=="rc")print $2}') \
- && apt-get install -y --no-install-recommends \
-      tesseract-ocr \
-      ghostscript \
-      libxml2 \
-      libxslt1.1 \
-      libopencv-core3.2 \
-      libmagick++-6.q16-7 \
-      python-flask \
-      python-six \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/* \
- && sed '/<policy domain="coder"/d' -i /etc/ImageMagick-6/policy.xml
+ && rm -rf /var/lib/apt/lists/*
+
 
 ### By default start the flask API server ###
 CMD ["/usr/bin/python","/usr/local/bin/tesseract_recognize_api.py"]
