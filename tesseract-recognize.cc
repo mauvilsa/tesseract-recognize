@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.02.07$
+ * @version $Version: 2019.02.18$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.02.07";
+static char version[] = "Version: 2019.02.18";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -197,16 +197,12 @@ void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLeve
   page.setPolystripe( xelem, height <= 0.0 ? 1.0 : height, offset, false );
 }
 
-void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, bool trim = false ) {
+void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem ) {
   double conf = 0.01*iter->Confidence( iter_level );
   char* text = iter->GetUTF8Text( iter_level );
-  if ( ! trim )
-    page.setTextEquiv( xelem, text, &conf );
-  else {
-    std::string stext(text);
-    stext = std::regex_replace( stext, std::regex("^\\s+|\\s+$"), "$1" );
-    page.setTextEquiv( xelem, stext.c_str(), &conf );
-  }
+  std::string stext(text);
+  stext = std::regex_replace( stext, std::regex("^\\s+|\\s+$"), "$1" );
+  page.setTextEquiv( xelem, stext.c_str(), &conf );
   delete[] text;
 }
 
@@ -631,7 +627,7 @@ int main( int argc, char *argv[] ) {
           /// Set block bounding box and text ///
           setCoords( iter, tesseract::RIL_BLOCK, page, xreg, images[n].x, images[n].y );
           if ( ! gb_onlylayout && gb_textlevels[LEVEL_REGION] )
-            setTextEquiv( iter, tesseract::RIL_BLOCK, page, xreg, true );
+            setTextEquiv( iter, tesseract::RIL_BLOCK, page, xreg );
         }
 
         /// Set rotation and reading direction ///
@@ -686,7 +682,7 @@ int main( int argc, char *argv[] ) {
             if ( xline != NULL ) {
               setLineCoords( iter, tesseract::RIL_TEXTLINE, page, xline, images[n].x, images[n].y, orientation );
               if ( ! gb_onlylayout && gb_textlevels[LEVEL_LINE] )
-                setTextEquiv( iter, tesseract::RIL_TEXTLINE, page, xline, true );
+                setTextEquiv( iter, tesseract::RIL_TEXTLINE, page, xline );
             }
 
             /// Loop through words in current text line ///
