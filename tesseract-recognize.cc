@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.02.18$
+ * @version $Version: 2019.02.19$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.02.18";
+static char version[] = "Version: 2019.02.19";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -150,9 +150,10 @@ void print_usage() {
 
 void setCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel iter_level, PageXML& page, xmlNodePtr& xelem, int x, int y, tesseract::Orientation orientation = tesseract::ORIENTATION_PAGE_UP ) {
   int left, top, right, bottom;
+  int pagenum = page.getPageNumber(xelem);
   iter->BoundingBox( iter_level, &left, &top, &right, &bottom );
   std::vector<cv::Point2f> points;
-  if ( left == 0 && top == 0 && right == (int)page.getPageWidth(0) && bottom == (int)page.getPageHeight(0) )
+  if ( left == 0 && top == 0 && right == (int)page.getPageWidth(pagenum) && bottom == (int)page.getPageHeight(pagenum) )
     points = { cv::Point2f(0,0), cv::Point2f(0,0) };
   else {
     cv::Point2f tl(x+left,y+top);
@@ -192,8 +193,8 @@ void setLineCoords( tesseract::ResultIterator* iter, tesseract::PageIteratorLeve
   double up2 = cv::norm( baseline_p2 - coords[1] );
   double down1 = cv::norm( baseline_p1 - coords[3] );
   double down2 = cv::norm( baseline_p2 - coords[2] );
-  double height = ( up1 < up2 ? up1 : up2 ) + ( down1 < down2 ? down1 : down2 );
-  double offset = ( down1 < down2 ? down1 : down2 ) / height;
+  double height = 0.5*( up1 + up2 + down1 + down2 );
+  double offset = height <= 0.0 ? 0.0 : 0.5*( down1 + down2 ) / height;
   page.setPolystripe( xelem, height <= 0.0 ? 1.0 : height, offset, false );
 }
 
@@ -762,6 +763,47 @@ int main( int argc, char *argv[] ) {
       if ( angle )
         page.rotatePage(angle, sel[n], true);
     }
+  }
+
+  /// Fill in "0,0 0,0" Word Coords next to Words with proper Coords ///
+  sel = page.select("//_:Word[_:Coords/@points='0,0 0,0']");
+  for ( n=(int)sel.size()-1; n>=0; n-- ) {
+    xmlNodePtr elem = sel[n];
+    xmlNodePtr elem_pre = page.selectNth("preceding-sibling::_:Word[_:Coords/@points!='0,0 0,0']", -1, elem);
+    xmlNodePtr elem_fol = page.selectNth("following-sibling::_:Word[_:Coords/@points!='0,0 0,0']", 0, elem);
+    if ( elem_pre == NULL && elem_fol == NULL )
+      continue;
+    std::vector<cv::Point2f> pts_pre = page.getPoints(elem_pre);
+    std::vector<cv::Point2f> pts_fol = page.getPoints(elem_fol);
+    std::vector<cv::Point2f> pts;
+    if ( elem_pre != NULL && elem_fol != NULL ) {
+      pts.push_back(pts_pre[1]);
+      pts.push_back(pts_fol[0]);
+      pts.push_back(pts_fol[3]);
+      pts.push_back(pts_pre[2]);
+    }
+    else if ( elem_pre != NULL ) {
+      cv::Point2f upper = pts_pre[1] - pts_pre[0];
+      cv::Point2f lower = pts_pre[2] - pts_pre[3];
+      upper = upper/cv::norm(upper) + pts_pre[1];
+      lower = lower/cv::norm(lower) + pts_pre[2];
+      pts.push_back(pts_pre[1]);
+      pts.push_back(upper);
+      pts.push_back(lower);
+      pts.push_back(pts_pre[2]);
+    }
+    else {
+      cv::Point2f upper = pts_fol[0] - pts_fol[1];
+      cv::Point2f lower = pts_fol[3] - pts_fol[2];
+      upper = upper/cv::norm(upper) + pts_fol[0];
+      lower = lower/cv::norm(lower) + pts_fol[3];
+      pts.push_back(upper);
+      pts.push_back(pts_fol[0]);
+      pts.push_back(pts_fol[3]);
+      pts.push_back(lower);
+    }
+    page.setCoords(elem, pts);
+    page.setProperty(elem, "coords-unk-filler");
   }
 
   /// Try to make imageFilename be a relative path w.r.t. the output XML ///
