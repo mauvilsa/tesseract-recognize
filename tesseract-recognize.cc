@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.02.19$
+ * @version $Version: 2019.04.10$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,9 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.02.19";
+static char version[] = "Version: 2019.04.10";
+
+char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
 char gb_default_lang[] = "eng";
 char gb_default_xpath[] = "//_:TextRegion";
@@ -433,7 +435,7 @@ int main( int argc, char *argv[] ) {
           image_num += "[" + std::to_string(n+1) + "]";
 
         if ( num_pages == 0 )
-          namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+          namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image), gb_page_ns );
         else
           namedimage.node = page.addPage( image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
         images.push_back( namedimage );
@@ -454,7 +456,7 @@ int main( int argc, char *argv[] ) {
         NamedImage namedimage;
         namedimage.image = NULL;
         if ( num_pages == 0 )
-          namedimage.node = page.newXml( tool_info, pagepath.c_str(), (int)pg->columns(), (int)pg->rows() );
+          namedimage.node = page.newXml( tool_info, pagepath.c_str(), (int)pg->columns(), (int)pg->rows(), gb_page_ns );
         else
           namedimage.node = page.addPage( pagepath.c_str(), (int)pg->columns(), (int)pg->rows() );
         images.push_back( namedimage );
@@ -474,7 +476,7 @@ int main( int argc, char *argv[] ) {
       NamedImage namedimage;
       namedimage.image = NULL;
       if ( num_pages == 0 )
-        namedimage.node = page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image) );
+        namedimage.node = page.newXml( tool_info, input_file, pixGetWidth(image), pixGetHeight(image), gb_page_ns );
       else
         namedimage.node = page.addPage( input_file, pixGetWidth(image), pixGetHeight(image) );
       num_pages++;
