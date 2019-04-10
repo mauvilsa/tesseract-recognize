@@ -7,7 +7,7 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 
 # INSTALLATION AND USAGE
 
-    git clone https://github.com/mauvilsa/tesseract-recognize
+    git clone --recursive https://github.com/mauvilsa/tesseract-recognize
     mkdir tesseract-recognize/build
     cd tesseract-recognize/build
     cmake -DCMAKE_INSTALL_PREFIX:PATH=$HOME ..
