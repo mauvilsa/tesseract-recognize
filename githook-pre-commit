@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ### Create pre-commit symlink if unset ###
 GITDIR="";
@@ -24,12 +24,12 @@ fi
 
 
 ### Update versions on files ###
-FILES=( $(git status --porcelain | sed 's| .* | |' | grep '^[MRA]') );
+FILES=( $(git status --porcelain | sed -r 's|^ |_|; s|^(.) |\1_|;' | grep -E '^([MRA]|.M)') );
 V=$(date -u +%Y.%m.%d);
 
 check_change_after_staged () {
   [ "${2:1:1}" = "M" ] &&
-    echo "${0##*/}: error: unable to update version due to change after staged: $1" 1>&2 &&
+    echo "${0##*/}: error: aborting due to file change after staged: $1" 1>&2 &&
     exit 1;
 }
 
@@ -41,16 +41,16 @@ update_file_version () {
 
 n=1;
 while [ "$n" -lt "${#FILES[@]}" ]; do
+  check_change_after_staged "${FILES[$n]}" "${FILES[$((n-1))]}";
   case "${FILES[$n]}" in
-    tesseract-recognize.cc | *.py )
-      check_change_after_staged "${FILES[$n]}" "${FILES[$((n-1))]}";
+    tesseract-recognize.cc )
       update_file_version "${FILES[$n]}";
       ;;
+    *.py )
+      echo "${0##*/}: pylint ${FILES[$n]}" 1>&2;
+      pylint --errors-only "${FILES[$n]}";
+      ;;
   esac
-  if [ "${FILES[$n]:$((${#FILES[$n]}-3))}" = ".py" ]; then
-    echo "${0##*/}: pylint ${FILES[$n]}" 1>&2;
-    pylint --errors-only "${FILES[$n]}";
-  fi
   [ "$?" != "0" ] && exit 1;
   n=$((n+2));
 done

@@ -7,6 +7,8 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 
 # INSTALLATION AND USAGE
 
+If you want to compile from source follow the instructions here. But if you only want to use the tools it is better to use docker as explained in the next section.
+
     git clone --recursive https://github.com/mauvilsa/tesseract-recognize
     mkdir tesseract-recognize/build
     cd tesseract-recognize/build
@@ -14,7 +16,7 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
     make install
     
     tesseract-recognize --help
-    tesseract-recognize IMAGE OUTPUT.xml
+    tesseract-recognize IMAGE -o OUTPUT.xml
 
 
 # INSTALLATION AND USAGE (DOCKER)
@@ -23,24 +25,30 @@ The latest docker images are based on Ubuntu 18.04 and use the version of tesser
 
 The docker images do not include language files for recognition, so additional to the docker image you need to get the corresponding files and make them accessible to the container. To install first pull the docker image of your choosing, using a command such as:
 
-    docker pull mauvilsa/tesseract-recognize:TAG
+    TAG="SELECTED_TAG_HERE"
+    docker pull mauvilsa/tesseract-recognize:$TAG
 
 Then there are two possible ways of using it, through a command line interface or through a REST API.
 
 ## Command line interface
 
-First you need to copy the command line interface script to some directory in your path.
+First download the [https://github.com/omni-us/docker-command-line-interface](docker-command-line-interface), put it in some directory in your path and make it executable, for example:
 
-    docker run --rm -it -u $(id -u):$(id -g) -v $HOME:$HOME mauvilsa/tesseract-recognize:TAG bash -c "cp /usr/local/bin/tesseract-recognize-docker $HOME/bin"
+    cd $HOME/.local/bin
+    wget https://raw.githubusercontent.com/omni-us/docker-command-line-interface/master/docker-command-line-interface
+    chmod +x docker-command-line-interface
 
-Then the docker image needs to be tagged as tesseract-recognize:active to indicate to the command line interface which is the docker image that has to be used.
+As an additional step, you could look at `docker-command-line-interface --help` and read about how to configure bash completion.
 
-    docker tag mauvilsa/tesseract-recognize:TAG tesseract-recognize:active
+After installing docker-command-line-interface, the tesseract-recognize tool can be used like any other command, i.e.
 
-After this, the tool can be used like any other command, i.e.
+    docker-command-line-interface --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize --help
+    docker-command-line-interface --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize IMAGE -o OUTPUT.xml
 
+For convenience you could setup an alias, i.e.
+
+    alias tesseract-recognize-docker="docker-command-line-interface --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
     tesseract-recognize-docker --help
-    tesseract-recognize-docker IMAGE OUTPUT.xml
 
 ## API interface
 
