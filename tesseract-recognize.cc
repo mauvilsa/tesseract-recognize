@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.04.10$
+ * @version $Version: 2019.07.25$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -22,7 +22,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.04.10";
+static char version[] = "Version: 2019.07.25";
 
 char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
@@ -773,8 +773,11 @@ int main( int argc, char *argv[] ) {
     xmlNodePtr elem = sel[n];
     xmlNodePtr elem_pre = page.selectNth("preceding-sibling::_:Word[_:Coords/@points!='0,0 0,0']", -1, elem);
     xmlNodePtr elem_fol = page.selectNth("following-sibling::_:Word[_:Coords/@points!='0,0 0,0']", 0, elem);
-    if ( elem_pre == NULL && elem_fol == NULL )
+    if ( elem_pre == NULL && elem_fol == NULL ) {
+      page.setCoords(elem, page.getPoints(page.parent(elem)));
+      page.setProperty(elem, "coords-unk-filler");
       continue;
+    }
     std::vector<cv::Point2f> pts_pre = page.getPoints(elem_pre);
     std::vector<cv::Point2f> pts_fol = page.getPoints(elem_fol);
     std::vector<cv::Point2f> pts;
