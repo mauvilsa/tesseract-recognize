@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.07.25$
+ * @version $Version: 2019.08.12$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -13,6 +13,9 @@
 #include <string>
 using std::string;
 #include <regex>
+#include <set>
+#include <sstream>
+#include <iterator>
 #include <getopt.h>
 
 #include <../leptonica/allheaders.h>
@@ -22,7 +25,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.07.25";
+static char version[] = "Version: 2019.08.12";
 
 char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
@@ -209,6 +212,29 @@ void setTextEquiv( tesseract::ResultIterator* iter, tesseract::PageIteratorLevel
   delete[] text;
 }
 
+template<typename Out>
+void split( const std::string &s, char delim, Out result ) {
+  std::stringstream ss(s);
+  std::string item;
+  while( std::getline(ss, item, delim) )
+    *(result++) = item;
+}
+
+std::set<int> parsePagesSet( std::string range ) {
+  std::set<int> pages_set;
+  std::vector<std::string> parts;
+  split( range, ',', std::back_inserter(parts) );
+  for( auto part : parts ) {
+    std::string::size_type dash_pos = part.find('-');
+    if( dash_pos == std::string::npos )
+      pages_set.insert(stoi(part));
+    else
+      for( int num=stoi(part.substr(0, dash_pos)); num<=stoi(part.substr(dash_pos+1)); num++ )
+        pages_set.insert(num);
+  }
+  return pages_set;
+}
+
 
 /*** Program ******************************************************************/
 int main( int argc, char *argv[] ) {
@@ -335,8 +361,9 @@ int main( int argc, char *argv[] ) {
   tesseract::ResultIterator* iter = NULL;
 
   std::regex reIsXml(".+\\.xml$|^-$",std::regex_constants::icase);
-  std::regex reIsTiff(".+\\.tif{1,2}$",std::regex_constants::icase);
-  std::regex reIsPdf(".+\\.pdf$",std::regex_constants::icase);
+  std::regex reIsTiff(".+\\.tif{1,2}(|\\[[-, 0-9]+\\])$",std::regex_constants::icase);
+  std::regex reIsPdf(".+\\.pdf(|\\[[-, 0-9]+\\])$",std::regex_constants::icase);
+  std::regex reImagePageNum("(.+)\\[([-, 0-9]+)\\]$");
   std::cmatch base_match;
   char *input_file = argv[optind];
   bool input_xml = std::regex_match(input_file,base_match,reIsXml);
@@ -360,6 +387,18 @@ int main( int argc, char *argv[] ) {
     input_xml = std::regex_match(input_file,base_match,reIsXml);
     bool input_tiff = std::regex_match(input_file,base_match,reIsTiff);
     bool input_pdf = std::regex_match(input_file,base_match,reIsPdf);
+
+    /// Get selected pages for tiff/pdf if given ///
+    std::set<int> pages_set;
+    std::string page_sel;
+    std::string input_file_str = std::string(input_file);
+    if ( input_tiff || input_pdf ) {
+      if( std::regex_match(input_file, base_match, reImagePageNum) ) {
+        pages_set = parsePagesSet(base_match[2].str());
+        page_sel = std::string(base_match[2].str());
+        input_file_str = std::string(base_match[1].str());
+      }
+    }
 
     /// Input is xml ///
     if ( input_xml ) {
@@ -418,26 +457,29 @@ int main( int argc, char *argv[] ) {
       pixRelease = true;
 
       /// Read input image ///
-      PIXA* tiffimage = pixaReadMultipageTiff( input_file );
+      PIXA* tiffimage = pixaReadMultipageTiff( input_file_str.c_str() );
       if ( tiffimage == NULL || tiffimage->n == 0 ) {
         fprintf( stderr, "%s: error: problems reading tiff image: %s\n", tool, input_file );
         return 1;
       }
 
-      for ( n=0; n<tiffimage->n; n++ ) {
-        PageImage image = pixClone(tiffimage->pix[n]);
+      if ( pages_set.size() > 0 && tiffimage->n <= *pages_set.rbegin() ) {
+        fprintf( stderr, "%s: error: invalid page selection (%s) on tiff with %d pages\n", tool, page_sel.c_str(), tiffimage->n+1 );
+        return 1;
+      }
 
+      for ( n=0; n<tiffimage->n; n++ ) {
+        if ( pages_set.size() > 0 && pages_set.find(n) == pages_set.end() )
+          continue;
+
+        PageImage image = pixClone(tiffimage->pix[n]);
+        std::string pagepath = input_file_str+"["+std::to_string(n)+"]";
         NamedImage namedimage;
         namedimage.image = image;
-
-        std::string image_num(input_file);
-        if ( tiffimage->n > 1 )
-          image_num += "[" + std::to_string(n+1) + "]";
-
         if ( num_pages == 0 )
-          namedimage.node = page.newXml( tool_info, image_num.c_str(), pixGetWidth(image), pixGetHeight(image), gb_page_ns );
+          namedimage.node = page.newXml( tool_info, pagepath.c_str(), pixGetWidth(image), pixGetHeight(image), gb_page_ns );
         else
-          namedimage.node = page.addPage( image_num.c_str(), pixGetWidth(image), pixGetHeight(image) );
+          namedimage.node = page.addPage( pagepath.c_str(), pixGetWidth(image), pixGetHeight(image) );
         images.push_back( namedimage );
         num_pages++;
       }
@@ -447,18 +489,23 @@ int main( int argc, char *argv[] ) {
 
     /// Input is pdf ///
     else if ( input_pdf ) {
-      std::list<Magick::Image> pdfpages; 
-      Magick::readImages( &pdfpages, input_file );
+      std::vector< std::pair<double,double> > pdf_pages = gsGetPdfPageSizes(input_file_str);
+      if ( pages_set.size() > 0 && (int)pdf_pages.size() <= *pages_set.rbegin() ) {
+        fprintf( stderr, "%s: error: invalid page selection (%s) on pdf with %d pages\n", tool, page_sel.c_str(), (int)pdf_pages.size() );
+        return 1;
+      }
 
-      n = 0;
-      for ( auto pg = pdfpages.begin(); pg != pdfpages.end(); pg++, n++ ) {
-        std::string pagepath = std::string(input_file)+"["+std::to_string(n+1)+"]";
+      for ( n=0; n<(int)pdf_pages.size(); n++ ) {
+        if ( pages_set.size() > 0 && pages_set.find(n) == pages_set.end() )
+          continue;
+
+        std::string pagepath = input_file_str+"["+std::to_string(n)+"]";
         NamedImage namedimage;
         namedimage.image = NULL;
         if ( num_pages == 0 )
-          namedimage.node = page.newXml( tool_info, pagepath.c_str(), (int)pg->columns(), (int)pg->rows(), gb_page_ns );
+          namedimage.node = page.newXml( tool_info, pagepath.c_str(), (int)(0.5+pdf_pages[n].first), (int)(0.5+pdf_pages[n].second), gb_page_ns );
         else
-          namedimage.node = page.addPage( pagepath.c_str(), (int)pg->columns(), (int)pg->rows() );
+          namedimage.node = page.addPage( pagepath.c_str(), (int)(0.5+pdf_pages[n].first), (int)(0.5+pdf_pages[n].second) );
         images.push_back( namedimage );
         num_pages++;
       }
@@ -496,7 +543,7 @@ int main( int argc, char *argv[] ) {
         page.loadImage(xpg, NULL, true, gb_density );
         images[n].image = page.getPageImage(n);
       } catch ( const std::exception& e ) {
-        fprintf( stderr, "%s: error: problems loading page image: %s\n", tool, page.getPageImageFilename(n).c_str() );
+        fprintf( stderr, "%s: error: problems loading page image: %s :: %s\n", tool, page.getPageImageFilename(n).c_str(), e.what() );
         return 1;
       }
     }

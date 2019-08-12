@@ -1,3 +1,6 @@
 [submodule "pagexml"]
 	path = pagexml
 	url = https://github.com/omni-us/pagexml.git
+[submodule "CMakeModules"]
+	path = CMakeModules
+	url = https://github.com/lbaehren/CMakeModules.git
