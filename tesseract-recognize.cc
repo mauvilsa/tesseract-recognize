@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2019.08.12$
+ * @version $Version: 2020.01.10$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -25,7 +25,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2019.08.12";
+static char version[] = "Version: 2020.01.10";
 
 char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
@@ -814,7 +814,7 @@ int main( int argc, char *argv[] ) {
     }
   }
 
-  /// Fill in "0,0 0,0" Word Coords next to Words with proper Coords ///
+  /// Fill in "0,0 0,0" Word Coords ///
   sel = page.select("//_:Word[_:Coords/@points='0,0 0,0']");
   for ( n=(int)sel.size()-1; n>=0; n-- ) {
     xmlNodePtr elem = sel[n];
