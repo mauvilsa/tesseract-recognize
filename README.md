@@ -28,16 +28,27 @@ The latest docker images are based on Ubuntu 18.04 and use the version of
 tesseract from the default package repositories (see the respective [docker hub
 page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)).
 
-The docker images only include language files for recognition of English, so for
-additional languages you need to get the corresponding files and make them
-accessible to the container. To install first pull the docker image of your
-choosing, using a command such as:
+To install first pull the docker image of your choosing, using a command such
+as:
 
     TAG="SELECTED_TAG_HERE"
     docker pull mauvilsa/tesseract-recognize:$TAG
 
-Then there are two possible ways of using it, through a command line interface
-or through a REST API.
+The basic docker image only includes language files for recognition of English,
+so for additional languages you need to provide to the docker container the
+corresponding tessdata files. There is also an additional docker image that can
+be used to create a volume that includes all languages from the tesseract-ocr-*
+ubuntu packages. To create this volume run the following:
+
+    docker pull mauvilsa/tesseract-recognize-langs:ubuntu18.04-pkg
+    docker run \
+      --rm \
+      --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata \
+      -it mauvilsa/tesseract-recognize-langs:ubuntu18.04-pkg
+
+Then there are two possible ways of using the tesseract-recognize docker image,
+through a command line interface or through a REST API, as explained in the next
+two sections.
 
 ## Command line interface
 
@@ -54,12 +65,23 @@ to configure bash completion.
 After installing docker-cli, the tesseract-recognize tool can be used like any
 other command, i.e.
 
-    docker-cli --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize --help
-    docker-cli --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize IMAGE -o OUTPUT.xml
+    docker-cli \
+      --ipc=host \
+      -- mauvilsa/tesseract-recognize:$TAG \
+      tesseract-recognize IMAGE -o OUTPUT.xml
+
+To recognize other languages using the tessdata volume mentioned previously can
+be done as follows
+
+    docker-cli \
+      --ipc=host \
+      --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata \
+      -- mauvilsa/tesseract-recognize:$TAG \
+      tesseract-recognize IMAGE -o OUTPUT.xml
 
 For convenience you could setup an alias, i.e.
 
-    alias tesseract-recognize-docker="docker-cli --ipc=host -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
+    alias tesseract-recognize-docker="docker-cli --ipc=host --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
     tesseract-recognize-docker --help
 
 ## API interface

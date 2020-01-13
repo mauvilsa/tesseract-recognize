@@ -2,9 +2,14 @@
 """Command line tool for the tesseract-recognize API server."""
 
 """
-  @version $Version: 2017.12.17$
-  @author Mauricio Villegas <mauricio_ville@yahoo.com>
-  @copyright Copyright(c) 2017-present, Mauricio Villegas <mauricio_ville@yahoo.com>
+@version $Version: 2020.01.13$
+@author Mauricio Villegas <mauricio_ville@yahoo.com>
+@copyright Copyright(c) 2017-present, Mauricio Villegas <mauricio_ville@yahoo.com>
+
+@requirements https://github.com/omni-us/pagexml/releases/download/2019.10.10/pagexml-2019.10.10-cp36-cp36m-linux_x86_64.whl
+@requirements jsonargparse>=2.20.0
+@requirements flask-restplus>=0.12.1
+@requirements prance>=0.15.0
 """
 
 import os

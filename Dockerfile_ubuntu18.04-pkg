@@ -30,12 +30,11 @@ RUN apt-get update --fix-missing \
  && rm -rf /var/lib/apt/lists/* \
  && sed '/<policy domain="coder"/d' -i /etc/ImageMagick-6/policy.xml
 
-COPY tesseract_recognize_api_requirements.txt /tmp/
-RUN pip3 install -r /tmp/tesseract_recognize_api_requirements.txt \
- && rm /tmp/tesseract_recognize_api_requirements.txt
-
 COPY --from=0 /tmp/tesseract-recognize/tesseract-recognize /usr/local/bin/
 COPY tesseract_recognize_api.py /usr/local/bin/
+RUN sed -n '/^@requirements /{ s|^@requirements ||; p; }' /usr/local/bin/tesseract_recognize_api.py > /tmp/requirements.txt \
+ && pip3 install -r /tmp/requirements.txt \
+ && rm /tmp/requirements.txt
 
 RUN useradd -m -u 1048 -g 0 tesseract
 USER 1048

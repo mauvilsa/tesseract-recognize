@@ -47,6 +47,7 @@ while [ "$n" -lt "${#FILES[@]}" ]; do
       update_file_version "${FILES[$n]}";
       ;;
     *.py )
+      update_file_version "${FILES[$n]}";
       echo "${0##*/}: pylint ${FILES[$n]}" 1>&2;
       pylint --errors-only "${FILES[$n]}";
       ;;

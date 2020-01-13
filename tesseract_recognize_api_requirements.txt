@@ -1,4 +1,0 @@
-https://github.com/omni-us/pagexml/releases/download/2019.10.10/pagexml-2019.10.10-cp36-cp36m-linux_x86_64.whl
-jsonargparse>=2.20.0
-flask-restplus>=0.12.1
-prance>=0.15.0

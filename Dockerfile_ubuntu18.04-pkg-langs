@@ -1,0 +1,16 @@
+FROM ubuntu:18.04
+
+MAINTAINER Mauricio Villegas <mauricio_ville@yahoo.com>
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+### Install all language packages ###
+RUN apt-get update --fix-missing \
+ && apt-get install -y --no-install-recommends \
+      rsync \
+      tesseract-ocr-* \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && mv /usr/share/tesseract-ocr /opt
+
+CMD rsync -av /opt/tesseract-ocr/4.00/tessdata /usr/share/tesseract-ocr/4.00
