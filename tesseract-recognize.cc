@@ -1,7 +1,7 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2020.01.10$
+ * @version $Version: 2021.02.09$
  * @author Mauricio Villegas <mauricio_ville@yahoo.com>
  * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
@@ -25,7 +25,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2020.01.10";
+static char version[] = "Version: 2021.02.09";
 
 char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
