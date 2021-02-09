@@ -5,11 +5,30 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 [![Docker Automated build](https://img.shields.io/docker/build/mauvilsa/tesseract-recognize.svg)]()
 
 
-# INSTALLATION AND USAGE
+# Requirements (Ubuntu 18.04 & 20.04)
 
-If you want to compile from source follow the instructions here. But if you only
-want to use the tools it is better to use docker as explained in the next
-section.
+## Build
+
+- make
+- cmake
+- g++
+- libtesseract-dev
+- libgs-dev
+- libxslt1-dev
+- libopencv-dev
+
+## Runtime
+
+- tesseract-ocr
+- ghostscript
+- libxslt1.1
+- libopencv-core3.2 | libopencv-core4.2
+
+
+# Installation and usage
+
+To compile from source follow the instructions here. If you only want the tool
+it might be simpler to use docker as explained in the next section.
 
     git clone --recursive https://github.com/mauvilsa/tesseract-recognize
     mkdir tesseract-recognize/build
@@ -22,7 +41,7 @@ section.
     tesseract-recognize INPUT.xml -o OUTPUT.xml
 
 
-# INSTALLATION AND USAGE (DOCKER)
+# Installation and usage (docker)
 
 The latest docker images are based on Ubuntu 18.04 and use the version of
 tesseract from the default package repositories (see the respective [docker hub
@@ -49,6 +68,7 @@ ubuntu packages. To create this volume run the following:
 Then there are two possible ways of using the tesseract-recognize docker image,
 through a command line interface or through a REST API, as explained in the next
 two sections.
+
 
 ## Command line interface
 
@@ -84,6 +104,7 @@ For convenience you could setup an alias, i.e.
     alias tesseract-recognize-docker="docker-cli --ipc=host --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
     tesseract-recognize-docker --help
 
+
 ## API interface
 
 The API interface uses a python flask sever that can be accessed through port
@@ -116,7 +137,7 @@ started, you can use a browser to get a more detailed view of the exposed
 endpoints by going to http://localhost:5000/tesseract-recognize/swagger.
 
 
-# VIEWING RESULTS
+# Viewing results
 
 The results can be viewed/edited using the Page XML editor available at
 https://github.com/mauvilsa/nw-page-editor or using other tools that support
@@ -124,14 +145,14 @@ this format such as http://www.primaresearch.org/tools and
 https://transkribus.eu/Transkribus/ .
 
 
-# CONTRIBUTING
+# Contributing
 
 If you intend to contribute, before any commits be sure to first execute
 githook-pre-commit to setup (symlink) the pre-commit hook. This hook takes care
 of automatically updating the tool version.
 
 
-# COPYRIGHT
+# Copyright
 
 The MIT License (MIT)
 
