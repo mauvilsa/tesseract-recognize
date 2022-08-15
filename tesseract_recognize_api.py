@@ -2,14 +2,14 @@
 """Command line tool for the tesseract-recognize API server."""
 
 """
-@version $Version: 2020.01.13$
+@version $Version: 2022.08.15$
 @author Mauricio Villegas <mauricio_ville@yahoo.com>
 @copyright Copyright(c) 2017-present, Mauricio Villegas <mauricio_ville@yahoo.com>
 
-@requirements https://github.com/omni-us/pagexml/releases/download/2019.10.10/pagexml-2019.10.10-cp36-cp36m-linux_x86_64.whl
+@requirements pagexml-slim>=2022.4.12
 @requirements jsonargparse>=2.20.0
-@requirements flask-restplus>=0.12.1
-@requirements prance>=0.15.0
+@requirements flask-restx>=0.5.1
+@requirements Werkzeug<2.1.0
 """
 
 import os
@@ -21,23 +21,19 @@ import queue
 import threading
 import tempfile
 import pagexml
-pagexml.set_omnius_schema()
 from time import time
 from functools import wraps
 from subprocess import Popen, PIPE, STDOUT
 from jsonargparse import ArgumentParser, ActionConfigFile, ActionYesNo
-from flask import Flask, Response, request, abort
-from flask_restplus import Api, Resource, reqparse
+from flask import Flask, Response, abort
+from flask_restx import Api, Resource, reqparse
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequest
-from prance.util import url
-from prance.convert import convert_url
 
 
 def get_cli_parser(logger=True):
     """Returns the parser object for the command line tool."""
     parser = ArgumentParser(
-        error_handler='usage_and_exit_error_handler',
         logger=logger,
         default_env=True,
         description=__doc__)
@@ -224,15 +220,6 @@ if __name__ == '__main__':
 
 
     ## Definition of endpoints ##
-    @api.route('/openapi.json')
-    class OpenAPI(Resource):
-        def get(self):
-            """Endpoint to get the OpenAPI json."""
-            absurl = url.absurl(request.base_url.replace(request.path, cfg.prefix+'/swagger.json'))
-            content, _ = convert_url(absurl)
-            return json.loads(content)
-
-
     @api.route('/version')
     class ServiceVersion(Resource):
         @api.response(200, description='Version of the running service.')

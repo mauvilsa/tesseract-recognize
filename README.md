@@ -15,14 +15,12 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 - libtesseract-dev
 - libgs-dev
 - libxslt1-dev
-- libopencv-dev
 
 ## Runtime
 
 - tesseract-ocr
 - ghostscript
 - libxslt1.1
-- libopencv-core3.2 | libopencv-core4.2
 
 
 # Installation and usage
@@ -119,7 +117,6 @@ Method | Endpoint                          | Description                      | 
 GET    | /tesseract-recognize/version      | Returns tool version information | -
 GET    | /tesseract-recognize/help         | Returns tool help                | -
 GET    | /tesseract-recognize/swagger.json | The swagger json                 | -
-GET    | /tesseract-recognize/openapi.json | The openapi json                 | -
 POST   | /tesseract-recognize/process      | Recognize given images or xml    | **images (array, required):** Image files with names as in page xml. **pagexml (optional):** Page xml file to recognize. **options (optional):** Array of strings with options for the tesseract-recognize tool.
 
 For illustration purposes the curl command can be used. Processing an input

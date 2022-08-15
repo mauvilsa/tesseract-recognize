@@ -1,12 +1,18 @@
-FROM mauvilsa/pagexml:build-ubuntu18.04-py36
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update --fix-missing \
  && apt-get install -y --no-install-recommends \
-      make \
+      build-essential \
       cmake \
-      libtesseract-dev \
+      ghostscript \
+      libgs-dev \
       libleptonica-dev \
-      libgs-dev
+      libtesseract-dev \
+      libxml2-dev \
+      libxslt1-dev \
+      python3-pip
 
 COPY . /tmp/tesseract-recognize/
 
@@ -15,14 +21,16 @@ RUN cd /tmp/tesseract-recognize \
  && make
 
 
-FROM mauvilsa/pagexml:runtime-ubuntu18.04-py36
+FROM ubuntu:22.04
 
-MAINTAINER Mauricio Villegas <mauricio_ville@yahoo.com>
+LABEL maintainer="Mauricio Villegas <mauricio_ville@yahoo.com>"
 
 RUN apt-get update --fix-missing \
  && apt-get install -y --no-install-recommends \
-      tesseract-ocr \
       ghostscript \
+      libxslt1.1 \
+      tesseract-ocr \
+      python3-pip \
  && apt-get autoremove -y \
  && apt-get purge -y $(dpkg -l | awk '{if($1=="rc")print $2}') \
  && apt-get clean \
