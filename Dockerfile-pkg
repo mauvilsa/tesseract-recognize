@@ -12,9 +12,12 @@ RUN apt-get update --fix-missing \
       libtesseract-dev \
       libxml2-dev \
       libxslt1-dev \
+      pkg-config \
       python3-pip
 
-COPY . /tmp/tesseract-recognize/
+COPY CMakeModules /tmp/tesseract-recognize/CMakeModules
+COPY pagexml /tmp/tesseract-recognize/pagexml
+COPY CMakeLists.txt Dockerfile* PageXML* mock_cv.h tesseract-recognize* /tmp/tesseract-recognize/
 
 RUN cd /tmp/tesseract-recognize \
  && cmake -DCMAKE_BUILD_TYPE=Release . \

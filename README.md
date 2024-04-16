@@ -5,7 +5,7 @@ tesseract-recognize - A tool that does layout analysis and/or text recognition u
 [![Docker Automated build](https://img.shields.io/docker/build/mauvilsa/tesseract-recognize.svg)]()
 
 
-# Requirements (Ubuntu 18.04 & 20.04)
+# Requirements (Ubuntu 18.04 & 20.04 & 22.04)
 
 ## Build
 
@@ -41,7 +41,7 @@ it might be simpler to use docker as explained in the next section.
 
 # Installation and usage (docker)
 
-The latest docker images are based on Ubuntu 18.04 and use the version of
+The latest docker images are based on Ubuntu 22.04 and use the version of
 tesseract from the default package repositories (see the respective [docker hub
 page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)).
 
@@ -57,11 +57,11 @@ corresponding tessdata files. There is also an additional docker image that can
 be used to create a volume that includes all languages from the tesseract-ocr-*
 ubuntu packages. To create this volume run the following:
 
-    docker pull mauvilsa/tesseract-recognize-langs:ubuntu18.04-pkg
+    docker pull mauvilsa/tesseract-recognize-langs:ubuntu22.04-pkg
     docker run \
       --rm \
       --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata \
-      -it mauvilsa/tesseract-recognize-langs:ubuntu18.04-pkg
+      -it mauvilsa/tesseract-recognize-langs:ubuntu22.04-pkg
 
 Then there are two possible ways of using the tesseract-recognize docker image,
 through a command line interface or through a REST API, as explained in the next
