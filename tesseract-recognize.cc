@@ -1,9 +1,8 @@
 /**
  * Tool that does layout analysis and OCR using tesseract providing results in Page XML format
  *
- * @version $Version: 2024.04.16$
- * @author Mauricio Villegas <mauricio_ville@yahoo.com>
- * @copyright Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
+ * @author Mauricio Villegas <maurovill+tesseract@gmail.com>
+ * @copyright Copyright (c) 2015-present, Mauricio Villegas <maurovill+tesseract@gmail.com>
  * @link https://github.com/mauvilsa/tesseract-recognize
  * @license MIT License
  */
@@ -25,7 +24,7 @@ using std::string;
 
 /*** Definitions **************************************************************/
 static char tool[] = "tesseract-recognize";
-static char version[] = "Version: 2024.04.16";
+static char version[] = "Version: 2025.03.31";
 
 char gb_page_ns[] = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15";
 
@@ -649,7 +648,7 @@ int main( int argc, char *argv[] ) {
          13 PT_VERT_LINE,      // Vertical Line.
          14 PT_NOISE,          // Lies outside of any column.
         */
-        if ( iter->BlockType() > PT_CAPTION_TEXT ) {
+        if ( iter->BlockType() > tesseract::PT_CAPTION_TEXT ) {
           if ( ! iter->Next( tesseract::RIL_BLOCK ) )
             break;
           continue;

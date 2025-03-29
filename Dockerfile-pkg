@@ -1,4 +1,5 @@
-FROM ubuntu:22.04
+ARG UBUNTU_TAG=24.04
+FROM ubuntu:$UBUNTU_TAG
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -24,7 +25,7 @@ RUN cd /tmp/tesseract-recognize \
  && make
 
 
-FROM ubuntu:22.04
+FROM ubuntu:$UBUNTU_TAG
 
 LABEL maintainer="Mauricio Villegas <mauricio_ville@yahoo.com>"
 
@@ -42,10 +43,10 @@ RUN apt-get update --fix-missing \
 COPY --from=0 /tmp/tesseract-recognize/tesseract-recognize /usr/local/bin/
 COPY tesseract_recognize_api.py /usr/local/bin/
 RUN sed -n '/^@requirements /{ s|^@requirements ||; p; }' /usr/local/bin/tesseract_recognize_api.py > /tmp/requirements.txt \
- && pip3 install -r /tmp/requirements.txt \
+ && pip3 install --break-system-packages -r /tmp/requirements.txt \
  && rm /tmp/requirements.txt
 
 RUN useradd -m -u 1048 -g 0 tesseract
 USER 1048
 EXPOSE 5000
-ENTRYPOINT /usr/local/bin/tesseract_recognize_api.py --host 0.0.0.0
+ENTRYPOINT ["/usr/local/bin/tesseract_recognize_api.py", "--host", "0.0.0.0"]
