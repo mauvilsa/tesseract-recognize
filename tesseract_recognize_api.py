@@ -2,14 +2,12 @@
 """Command line tool for the tesseract-recognize API server."""
 
 """
-@version $Version: 2022.08.15$
-@author Mauricio Villegas <mauricio_ville@yahoo.com>
-@copyright Copyright(c) 2017-present, Mauricio Villegas <mauricio_ville@yahoo.com>
+@author Mauricio Villegas <maurovill+tesseract@gmail.com>
+@copyright Copyright(c) 2017-present, Mauricio Villegas <maurovill+tesseract@gmail.com>
 
 @requirements pagexml-slim>=2022.4.12
-@requirements jsonargparse>=2.20.0
-@requirements flask-restx>=0.5.1
-@requirements Werkzeug<2.1.0
+@requirements jsonargparse>=4.38.0
+@requirements flask-restx>=1.3.0
 """
 
 import os
@@ -24,7 +22,7 @@ import pagexml
 from time import time
 from functools import wraps
 from subprocess import Popen, PIPE, STDOUT
-from jsonargparse import ArgumentParser, ActionConfigFile, ActionYesNo
+from jsonargparse import ArgumentParser, ActionYesNo
 from flask import Flask, Response, abort
 from flask_restx import Api, Resource, reqparse
 from werkzeug.datastructures import FileStorage
@@ -39,7 +37,7 @@ def get_cli_parser(logger=True):
         description=__doc__)
 
     parser.add_argument('--cfg',
-        action=ActionConfigFile,
+        action='config',
         help='Path to a yaml configuration file.')
     parser.add_argument('--threads',
         type=int,
@@ -216,7 +214,6 @@ if __name__ == '__main__':
               prefix=cfg.prefix,
               title='tesseract-recognize API',
               description='An API for running tesseract-recognition jobs.')
-    sys.modules['flask.cli'].show_server_banner = lambda *x: None  # type: ignore
 
 
     ## Definition of endpoints ##

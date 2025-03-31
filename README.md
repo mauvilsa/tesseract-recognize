@@ -2,10 +2,8 @@
 
 tesseract-recognize - A tool that does layout analysis and/or text recognition using tesseract and outputs the result in Page XML format.
 
-[![Docker Automated build](https://img.shields.io/docker/build/mauvilsa/tesseract-recognize.svg)]()
 
-
-# Requirements (Ubuntu 18.04 & 20.04 & 22.04)
+# Requirements (Ubuntu 18.04 & 20.04 & 22.04 & 24.04)
 
 ## Build
 
@@ -41,7 +39,7 @@ it might be simpler to use docker as explained in the next section.
 
 # Installation and usage (docker)
 
-The latest docker images are based on Ubuntu 22.04 and use the version of
+The latest docker images are based on Ubuntu 24.04 and use the version of
 tesseract from the default package repositories (see the respective [docker hub
 page](https://hub.docker.com/r/mauvilsa/tesseract-recognize/)).
 
@@ -57,11 +55,11 @@ corresponding tessdata files. There is also an additional docker image that can
 be used to create a volume that includes all languages from the tesseract-ocr-*
 ubuntu packages. To create this volume run the following:
 
-    docker pull mauvilsa/tesseract-recognize-langs:ubuntu22.04-pkg
+    docker pull mauvilsa/tesseract-recognize:$TAG-langs
     docker run \
       --rm \
-      --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata \
-      -it mauvilsa/tesseract-recognize-langs:ubuntu22.04-pkg
+      --mount source=tesseract-ocr-tessdata,destination=/opt/tesseract-ocr/tessdata \
+      -it mauvilsa/tesseract-recognize:$TAG-langs
 
 Then there are two possible ways of using the tesseract-recognize docker image,
 through a command line interface or through a REST API, as explained in the next
@@ -93,13 +91,14 @@ be done as follows
 
     docker-cli \
       --ipc=host \
-      --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata \
+      --mount source=tesseract-ocr-tessdata,destination=/opt/tesseract-ocr/tessdata \
+      --env TESSDATA_PREFIX=/opt/tesseract-ocr/tessdata \
       -- mauvilsa/tesseract-recognize:$TAG \
-      tesseract-recognize IMAGE -o OUTPUT.xml
+      tesseract-recognize --lang deu IMAGE -o OUTPUT.xml
 
 For convenience you could setup an alias, i.e.
 
-    alias tesseract-recognize-docker="docker-cli --ipc=host --mount source=tesseract-ocr-tessdata,destination=/usr/share/tesseract-ocr/4.00/tessdata -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
+    alias tesseract-recognize-docker="docker-cli --ipc=host --mount source=tesseract-ocr-tessdata,destination=/opt/tesseract-ocr/tessdata --env TESSDATA_PREFIX=/opt/tesseract-ocr/tessdata -- mauvilsa/tesseract-recognize:$TAG tesseract-recognize"
     tesseract-recognize-docker --help
 
 
@@ -147,10 +146,3 @@ https://transkribus.eu/Transkribus/ .
 If you intend to contribute, before any commits be sure to first execute
 githook-pre-commit to setup (symlink) the pre-commit hook. This hook takes care
 of automatically updating the tool version.
-
-
-# Copyright
-
-The MIT License (MIT)
-
-Copyright (c) 2015-present, Mauricio Villegas <mauricio_ville@yahoo.com>
